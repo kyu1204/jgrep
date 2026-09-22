@@ -19,3 +19,14 @@ jobs:
       - run: bun test src/
       - run: bun run build
       - run: node dist/jgrep.js --help
+      - name: Node runtime smoke (the npm package runs under node, tests run under bun)
+        env: { TYPESAFE_API_KEY: dummy-key-for-ci }
+        run: |
+          set +e
+          out=$(node dist/jgrep.js --rows examples/creators.csv --json "is this about beauty" 2>&1); code=$?
+          set -e
+          echo "$out" | tail -3
+          # a bad key must surface as an API auth error, never as a runtime error such as ERR_OUT_OF_RANGE
+          echo "$out" | grep -qiE "401|invalid_api_key|rejected the key" || { echo "expected an auth error from the API under node"; exit 1; }
+          echo "$out" | grep -qiE "out of range|RangeError|TypeError|ReferenceError" && { echo "node runtime error detected"; exit 1; }
+          test "$code" -eq 2
