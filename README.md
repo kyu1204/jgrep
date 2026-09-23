@@ -118,6 +118,11 @@ Measured on a 142-file TypeScript suite, 3 commits touching 12 source files (202
 Selection itself: 7 requests, 56k tokens, $0.0024, 1.0 s. The suite above is fast, so
 runner startup dominates; the ratio matters more on suites that take minutes.
 
+On five OSS repos (hono, zod, fastify, flask, requests; 60 commits that changed both source
+and tests), `--tests` selected 12% of test files and caught 92% of the tests each commit's
+author had touched, versus 43% from name and import matching alone; $0.11 total. Method and
+per-commit rows: [bench/tests](bench/tests/README.md).
+
 ### Score a table (CSV / JSONL), not just code
 
 Every row becomes one state. One description works like grep; a JSON file of
