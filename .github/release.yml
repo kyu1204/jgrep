@@ -1,0 +1,13 @@
+# Categories for GitHub's auto-generated release notes (PR labels). Unlabeled PRs land in "Changes".
+changelog:
+  categories:
+    - title: Breaking
+      labels: [breaking]
+    - title: Features
+      labels: [enhancement]
+    - title: Fixes
+      labels: [bug]
+    - title: Docs
+      labels: [documentation]
+    - title: Changes
+      labels: ["*"]

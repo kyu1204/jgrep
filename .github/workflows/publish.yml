@@ -13,7 +13,7 @@ jobs:
   publish-npm:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write   # create the GitHub Release
       id-token: write   # npm Trusted Publishing (OIDC), no token secret
     steps:
       - uses: actions/checkout@v4
@@ -35,3 +35,9 @@ jobs:
           TAG="${{ inputs.tag || github.ref_name }}"
           test "v$(node -p 'require("./package.json").version')" = "$TAG" || { echo "package.json version != $TAG"; exit 1; }
       - run: npm publish --provenance --access public
+      - name: GitHub Release with auto-generated notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --verify-tag --generate-notes
