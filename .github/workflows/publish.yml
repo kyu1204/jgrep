@@ -12,6 +12,10 @@ on:
         description: "Existing tag to (re)publish, e.g. v0.2.0"
         required: true
 
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
 jobs:
   publish-npm:
     if: >-
@@ -26,7 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.event.pull_request.merge_commit_sha }}
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.event.pull_request.merge_commit_sha }}
       - uses: oven-sh/setup-bun@v2
       - uses: actions/setup-node@v4
         with:
@@ -40,15 +44,17 @@ jobs:
         run: node dist/jgrep.js --version
       - name: Resolve tag; it must match package.json (and the release/ branch name)
         id: v
+        env:
+          RELEASE_REF: ${{ inputs.tag || github.event.pull_request.head.ref }}
         run: |
           PKG="v$(node -p 'require("./package.json").version')"
-          TAG="${{ inputs.tag || github.event.pull_request.head.ref }}"; TAG="${TAG#release/}"
+          TAG="${RELEASE_REF#release/}"
           test "$TAG" = "$PKG" || { echo "tag/branch says $TAG but package.json says $PKG"; exit 1; }
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
       - name: Tag + GitHub Release with auto-generated notes
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.v.outputs.tag }}
         run: |
-          TAG="${{ steps.v.outputs.tag }}"
           gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --target "$GITHUB_SHA" --generate-notes
       - run: npm publish --provenance --access public
