@@ -5,7 +5,7 @@ import { readRows, loadQuestions, scoreRows, flattenAnswers, toCsv } from "./row
 import { loadTests, selectTests } from "./tests";
 import { JevProviderError } from "./errors";
 
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
 const USAGE = `jgrep ${VERSION} — semantic grep powered by Jev (TypeSafe)
 
 usage: jgrep init                       interactive setup (API key, agent skills)
