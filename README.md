@@ -181,8 +181,60 @@ jgrep [options] --tests [ref] [--staged] [path ...]
       --out <file>      with --questions: write the CSV here instead of stdout
   -b, --batch <n>       chunks per request (default 16)
   -c, --concurrency <n> parallel requests (default 16)
+      --timeout <s>     per-batch deadline, retries included (default 15)
+      --request-timeout <s>  per-attempt HTTP timeout (default 30)
+      --retries <n>     failed attempts tolerated per batch (default 4)
+      --rate <req/s>    global request pacing (token bucket); 0 = unlimited
+      --fail-fast       abort on the first fatal error instead of isolating it
       --no-cache        ignore and do not write ~/.cache/jgrep
 ```
+
+## Reliability & errors
+
+Failures are isolated by default: a failed batch marks only its chunks errored
+(rows, when scoring), the rest of the run continues, and answers already paid
+for are kept in the cache.
+
+- **Retries**: statuses 408/429/5xx and transport errors (timeouts,
+  `ECONNRESET`/`ETIMEDOUT`/`ECONNREFUSED`) retry with full-jitter exponential
+  backoff (500 ms base, 30 s cap), `--retries` times (default 4, so 5 attempts).
+  A provider `Retry-After` is honored, capped at 5 minutes.
+- **Deadlines**: `--request-timeout` (30 s) bounds one HTTP attempt;
+  `--timeout` (15 s) is the deadline for a whole batch *including* its retries —
+  an expired batch is recorded as errored and the run moves on.
+- **Pacing**: `--rate REQ/SEC` spaces all requests with a token bucket
+  (0 = unlimited).
+- **Circuit breaker**: 3 consecutive fatal failures — out of credits, bad key,
+  model gone, host unreachable, TLS — stop new dispatches instead of hammering
+  on; chunks never attempted are reported as `circuit_breaker_open`.
+  `--fail-fast` restores abort-on-the-first-fatal instead of isolating.
+
+Exit status: `0` hits, `1` none, `2` on error or when any chunk/row errored —
+partial failures still report their hits, the summary line carries the error
+breakdown (` · 4 errored (3 timeout, 1 rate_limited)`), and up to 5 examples
+go to stderr. Every failure carries a typed kind:
+
+| kind                   | meaning                                                        |
+| ---------------------- | -------------------------------------------------------------- |
+| `insufficient_credits` | out of credits — top up with the provider                      |
+| `invalid_api_key`      | key rejected; the hint tells you if it worked earlier this run |
+| `model_unavailable`    | the provider does not serve this model                         |
+| `rate_limited`         | throttled — pace with `--rate`                                 |
+| `bad_request`          | request-shape problem; the provider's body is quoted           |
+| `malformed_response`   | unexpected 200 body — the API surface may have changed         |
+| `server_unreachable`   | network or provider down after retries                         |
+| `tls_error`            | certificate problem, message quoted verbatim                   |
+| `timeout`              | attempt or batch deadline exceeded                             |
+| `circuit_breaker_open` | never attempted — the breaker stopped new dispatches           |
+
+**`--json` is unchanged** (same contract as 0.3.0): the bare array — code mode
+`[{file,start,end,p,text}]`, rows questions mode the scored table rows (your row
+fields plus the answer columns), rows single-description mode the shown hits
+`[{row, p, ...row fields}]` with `row` the CSV line number. Questions mode
+(`--questions`) includes **every row** — an errored row keeps its place with the
+question columns empty (its flattened answer is null); single-description mode
+emits only the shown hits, so errored rows never enter that array. Errors
+surface through the stderr summary and exit 2.
 
 ## How it works
 
