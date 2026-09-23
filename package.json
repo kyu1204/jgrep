@@ -1,6 +1,6 @@
 {
   "name": "jevgrep",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Semantic grep: describe the code you want in English, get file:line hits. Powered by TypeSafe Jev. No index, no embeddings, no dependencies.",
   "keywords": ["grep", "semantic-search", "code-search", "jev", "typesafe", "lint", "cli"],
   "license": "MIT",
