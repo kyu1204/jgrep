@@ -1,24 +1,36 @@
 name: Publish
 
+# Release = merge a PR whose head branch is `release/vX.Y.Z` (package.json already bumped to X.Y.Z).
+# The merge creates tag vX.Y.Z + a GitHub Release with auto-generated notes, then publishes to npm.
 on:
-  push:
-    tags: ["v*"]
+  pull_request:
+    types: [closed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       tag:
         description: "Existing tag to (re)publish, e.g. v0.2.0"
         required: true
 
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
 jobs:
   publish-npm:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       startsWith(github.event.pull_request.head.ref, 'release/') &&
+       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write   # create the tag + GitHub Release
       id-token: write   # npm Trusted Publishing (OIDC), no token secret
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.event.pull_request.merge_commit_sha }}
       - uses: oven-sh/setup-bun@v2
       - uses: actions/setup-node@v4
         with:
@@ -30,8 +42,19 @@ jobs:
       - run: bun run build
       - name: Verify CLI works
         run: node dist/jgrep.js --version
-      - name: Verify tag matches package version
+      - name: Resolve tag; it must match package.json (and the release/ branch name)
+        id: v
+        env:
+          RELEASE_REF: ${{ inputs.tag || github.event.pull_request.head.ref }}
         run: |
-          TAG="${{ inputs.tag || github.ref_name }}"
-          test "v$(node -p 'require("./package.json").version')" = "$TAG" || { echo "package.json version != $TAG"; exit 1; }
+          PKG="v$(node -p 'require("./package.json").version')"
+          TAG="${RELEASE_REF#release/}"
+          test "$TAG" = "$PKG" || { echo "tag/branch says $TAG but package.json says $PKG"; exit 1; }
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - name: Tag + GitHub Release with auto-generated notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.v.outputs.tag }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --target "$GITHUB_SHA" --generate-notes
       - run: npm publish --provenance --access public
