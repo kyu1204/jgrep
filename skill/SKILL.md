@@ -38,7 +38,7 @@ jgrep --diff --staged "rule"             # lint your staged change
 jgrep --diff origin/main "rule"          # lint the branch against main
 ```
 
-Exit status: 0 hits found, 1 none, 2 error. Every run prints a summary line
+Exit status: 0 hits found, 1 none, 2 jgrep could not run (never treat 2 as "clean"). Every run prints a summary line
 on stderr: `N hits / M chunks · tokens · $cost · seconds`.
 
 ## Reading results

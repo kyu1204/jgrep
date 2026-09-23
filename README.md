@@ -76,12 +76,22 @@ jgrep --diff origin/main "adds an HTTP endpoint that has no auth check"
 jgrep --diff origin/main "changes billing logic without touching a test"
 ```
 
-Exit status is grep's (`0` matched, `1` nothing, `2` error), so CI negates it:
+Exit status is grep's: `0` matched, `1` nothing matched, `2` jgrep could not run
+(bad key, API down, malformed response). In CI keep the three apart: a plain `!`
+would turn an outage or an expired secret into a passing check.
 
 ```yaml
 - run: npm i -g jevgrep
-- run: '! jgrep --diff origin/${{ github.base_ref }} "adds an HTTP endpoint that has no auth check"'
+- name: no unauthenticated endpoints
   env: { TYPESAFE_API_KEY: "${{ secrets.TYPESAFE_API_KEY }}" }
+  run: |
+    set +e
+    jgrep --diff "origin/${{ github.base_ref }}" "adds an HTTP endpoint that has no auth check"
+    case $? in
+      0) echo "::error::jgrep found a match"; exit 1 ;;
+      1) ;;                                          # clean
+      *) echo "::error::jgrep failed to run";  exit 1 ;;
+    esac
 ```
 
 ### Run only the tests a change can affect
