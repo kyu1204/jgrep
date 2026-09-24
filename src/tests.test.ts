@@ -67,3 +67,8 @@ test("directMatches treats type-test suffixes (.tst.ts, .test-d.ts) like .test.t
   const tests = ["types/fastify.tst.ts", "types/router.test-d.ts", "src/other.test.ts"];
   expect([...directMatches(["src/fastify.ts", "lib/router.ts"], tests)].sort()).toEqual(["types/fastify.tst.ts", "types/router.test-d.ts"]);
 });
+
+test("directMatches accepts an underscore separator before the test suffix (foo_test.ts, foo_tst.ts)", () => {
+  const tests = ["src/foo_test.ts", "types/bar_tst.ts", "types/baz_test-d.ts", "src/other_test.ts"];
+  expect([...directMatches(["src/foo.ts", "src/bar.ts", "src/baz.ts"], tests)].sort()).toEqual(["src/foo_test.ts", "types/bar_tst.ts", "types/baz_test-d.ts"]);
+});

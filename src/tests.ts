@@ -30,7 +30,7 @@ export function signature(file: string, text = fs.readFileSync(file, "utf8")): s
   return lines.slice(0, 60).join("\n");
 }
 
-const stem = (f: string) => path.basename(f).replace(/\.(test|spec|tst|test-d)\.[cm]?[jt]sx?$|_(test|spec)\.(py|go|rb|exs)$|^test_|\.[^.]+$/g, "").toLowerCase();
+const stem = (f: string) => path.basename(f).replace(/[._](test|spec|tst|test-d)\.[cm]?[jt]sx?$|_(test|spec)\.(py|go|rb|exs)$|^test_|\.[^.]+$/g, "").toLowerCase();
 
 /** Tests whose name mirrors a changed source file (foo.ts -> foo.test.ts, foo.py -> test_foo.py). */
 export function directMatches(changedFiles: string[], tests: string[]): Set<string> {
