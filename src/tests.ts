@@ -17,7 +17,7 @@ export interface TestFile { file: string; signature: string }
 export interface Selected { file: string; p: number; reason: "direct" | "import" | "jev" | "cached" }
 
 // ponytail: patterns cover js/ts, python, go, ruby, rust, java, elixir; add flags when a stack is missing.
-export const TEST_FILE_RE = /(^|\/)(tests?|__tests__|spec|specs)\/|(\.|_)(test|spec)\.[cm]?[jt]sx?$|(^|\/)test_[^/]*\.py$|_test\.(py|go|rb|exs)$|_spec\.rb$|(^|\/)[^/]*Tests?\.(java|kt|swift|cs)$|(^|\/)tests\.rs$/;
+export const TEST_FILE_RE = /(^|\/)(tests?|__tests__|spec|specs)\/|(\.|_)(test|spec|tst|test-d)\.[cm]?[jt]sx?$|(^|\/)test_[^/]*\.py$|_test\.(py|go|rb|exs)$|_spec\.rb$|(^|\/)[^/]*Tests?\.(java|kt|swift|cs)$|(^|\/)tests\.rs$/;
 
 export function findTestFiles(files: string[]): string[] {
   return files.filter((f) => TEST_FILE_RE.test(f));
@@ -30,7 +30,7 @@ export function signature(file: string, text = fs.readFileSync(file, "utf8")): s
   return lines.slice(0, 60).join("\n");
 }
 
-const stem = (f: string) => path.basename(f).replace(/\.(test|spec)\.[cm]?[jt]sx?$|_(test|spec)\.(py|go|rb|exs)$|^test_|\.[^.]+$/g, "").toLowerCase();
+const stem = (f: string) => path.basename(f).replace(/[._](test|spec|tst|test-d)\.[cm]?[jt]sx?$|_(test|spec)\.(py|go|rb|exs)$|^test_|\.[^.]+$/g, "").toLowerCase();
 
 /** Tests whose name mirrors a changed source file (foo.ts -> foo.test.ts, foo.py -> test_foo.py). */
 export function directMatches(changedFiles: string[], tests: string[]): Set<string> {

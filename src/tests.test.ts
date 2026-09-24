@@ -2,8 +2,8 @@ import { test, expect } from "bun:test";
 import { findTestFiles, signature, directMatches, changedFilesOf, compactDiff, selectTests } from "./tests";
 
 test("findTestFiles matches common layouts across stacks", () => {
-  const files = ["src/a.ts", "src/a.test.ts", "src/b.spec.tsx", "tests/unit/c.ts", "pkg/d_test.go", "app/test_e.py", "spec/f_spec.rb", "src/G.java", "src/GTest.java", "README.md"];
-  expect(findTestFiles(files)).toEqual(["src/a.test.ts", "src/b.spec.tsx", "tests/unit/c.ts", "pkg/d_test.go", "app/test_e.py", "spec/f_spec.rb", "src/GTest.java"]);
+  const files = ["src/a.ts", "src/a.test.ts", "src/b.spec.tsx", "tests/unit/c.ts", "pkg/d_test.go", "app/test_e.py", "spec/f_spec.rb", "src/G.java", "src/GTest.java", "types/h.tst.ts", "types/i.test-d.ts", "README.md"];
+  expect(findTestFiles(files)).toEqual(["src/a.test.ts", "src/b.spec.tsx", "tests/unit/c.ts", "pkg/d_test.go", "app/test_e.py", "spec/f_spec.rb", "src/GTest.java", "types/h.tst.ts", "types/i.test-d.ts"]);
 });
 
 test("signature keeps imports and test names only", () => {
@@ -61,4 +61,14 @@ test("selectTests: direct matches skip Jev, others are judged and cached", async
   expect(r.selected.map((s) => [s.file, s.reason])).toEqual([["src/rows.test.ts", "direct"], ["src/cli.test.ts", "jev"]]);
   const r2 = await selectTests(diff, tests, { threshold: 0.5, batch: 16, concurrency: 2, apiKey: "k", fetchImpl, cache });
   expect(calls).toHaveLength(1); expect(r2.cached).toBe(2);
+});
+
+test("directMatches treats type-test suffixes (.tst.ts, .test-d.ts) like .test.ts", () => {
+  const tests = ["types/fastify.tst.ts", "types/router.test-d.ts", "src/other.test.ts"];
+  expect([...directMatches(["src/fastify.ts", "lib/router.ts"], tests)].sort()).toEqual(["types/fastify.tst.ts", "types/router.test-d.ts"]);
+});
+
+test("directMatches accepts an underscore separator before the test suffix (foo_test.ts, foo_tst.ts)", () => {
+  const tests = ["src/foo_test.ts", "types/bar_tst.ts", "types/baz_test-d.ts", "src/other_test.ts"];
+  expect([...directMatches(["src/foo.ts", "src/bar.ts", "src/baz.ts"], tests)].sort()).toEqual(["src/foo_test.ts", "types/bar_tst.ts", "types/baz_test-d.ts"]);
 });
