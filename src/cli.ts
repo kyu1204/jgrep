@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import fs from "node:fs";
-import { chunkPaths, diffChunks, gitDiff, jgrep, loadCache, saveCache, resolveApiKey, USD_PER_M_INPUT, type Hit, type Kind } from "./jgrep";
+import { chunkPaths, diffChunks, gitDiff, jgrep, loadCache, saveCache, resolveProvider, USD_PER_M_INPUT, type Hit, type Kind } from "./jgrep";
 import { readRows, loadQuestions, scoreRows, flattenAnswers, toCsv } from "./rows";
 import { loadTests, selectTests } from "./tests";
 import { JevProviderError } from "./errors";
@@ -153,7 +153,7 @@ async function main() {
   const cache = o.cache ? loadCache() : {};
   try {
     const r = await jgrep(o.question, chunks, {
-      ...o, kind, apiKey: resolveApiKey(), cache,
+      ...o, kind, ...resolveProvider(), cache,
       timeoutSec: o.timeout, requestTimeoutSec: o.requestTimeout, maxRetries: o.retries,
       ratePerSec: o.rate || undefined, failFast: o.failFast,
       onProgress: (d, n) => { if (process.stderr.isTTY) process.stderr.write(`\r${d}/${n} requests`); },
@@ -198,7 +198,7 @@ async function testsMain(o: ReturnType<typeof parse>) {
   const cache = o.cache ? loadCache() : {};
   try {
     const r = await selectTests(diff, tests, {
-      ...o, threshold, apiKey: resolveApiKey(), cache,
+      ...o, threshold, ...resolveProvider(), cache,
       timeoutSec: o.timeout, requestTimeoutSec: o.requestTimeout, maxRetries: o.retries,
       ratePerSec: o.rate || undefined, failFast: o.failFast,
       onProgress: (d, n) => { if (process.stderr.isTTY) process.stderr.write(`\r${d}/${n} requests`); },
@@ -229,7 +229,7 @@ async function rowsMain(o: ReturnType<typeof parse>) {
   const cache = o.cache ? loadCache() : {};
   try {
     const r = await scoreRows(rows, questions, {
-      ...o, apiKey: resolveApiKey(), cache,
+      ...o, ...resolveProvider(), cache,
       timeoutSec: o.timeout, requestTimeoutSec: o.requestTimeout, maxRetries: o.retries,
       ratePerSec: o.rate || undefined, failFast: o.failFast,
       onProgress: (d, n) => { if (process.stderr.isTTY) process.stderr.write(`\r${d}/${n} requests`); },

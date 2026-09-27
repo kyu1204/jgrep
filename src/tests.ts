@@ -87,6 +87,7 @@ export interface TestError { file: string; kind: JevErrorKind; message: string; 
 
 export interface SelectOptions {
   threshold: number; batch: number; concurrency: number; apiKey: string;
+  endpoint?: string; model?: string;
   timeoutSec?: number;         // per-batch deadline, retries included (defaults shared with jgrep)
   requestTimeoutSec?: number;  // per attempt
   maxRetries?: number;         // failed attempts tolerated before the final error
@@ -147,8 +148,9 @@ export async function selectTests(diff: string, tests: TestFile[], o: SelectOpti
     b.forEach((_, j) => {
       questions[`t${j}`] = { type: "noul", instructions: `Look only at the test file with id "t${j}". Given the diff, is this test plausibly affected by the change: it imports or exercises a changed module or function, or asserts behaviour the diff alters? Unrelated tests should be no.` };
     });
-    const res = await postSystemOne({ model: MODEL, state, questions }, o.apiKey, {
+    const res = await postSystemOne({ model: o.model ?? MODEL, state, questions }, o.apiKey, {
       ...post,
+      endpoint: o.endpoint,
       deadlineMs: Date.now() + timeoutMs, // per-batch deadline, retries included
     });
     tokens += res.usage?.input_tokens ?? 0;

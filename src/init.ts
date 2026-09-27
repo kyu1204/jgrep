@@ -6,10 +6,19 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFile } from "node:child_process";
 import * as p from "@clack/prompts";
-import { CONFIG_FILE, installSkills, resolveApiKey, saveApiKey, verifyApiKey } from "./jgrep";
+import {
+  CONFIG_FILE, ENDPOINT, MODEL, OPENROUTER_ENDPOINT, OPENROUTER_MODEL,
+  installSkills, resolveProvider, saveApiKey, verifyApiKey,
+} from "./jgrep";
 
 export const REPO_URL = "https://github.com/kyu1204/jgrep";
 const CONSOLE_URL = "https://console.typesafe.ai";
+
+/** OpenRouter keys are prefixed `sk-or-`; everything else is treated as a TypeSafe key. */
+export const varNameFor = (key: string): "TYPESAFE_API_KEY" | "OPENROUTER_API_KEY" =>
+  key.startsWith("sk-or-") ? "OPENROUTER_API_KEY" : "TYPESAFE_API_KEY";
+const endpointFor = (varName: "TYPESAFE_API_KEY" | "OPENROUTER_API_KEY") =>
+  varName === "OPENROUTER_API_KEY" ? { endpoint: OPENROUTER_ENDPOINT, model: OPENROUTER_MODEL } : { endpoint: ENDPOINT, model: MODEL };
 const SKILL_SRC = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "skill", "SKILL.md");
 
 function bail(msg = "Setup cancelled."): never {
@@ -29,27 +38,35 @@ export async function init() {
 
   // 1. key
   let existing: string | undefined;
-  try { existing = resolveApiKey(); } catch { /* none */ }
+  let existingVar: "TYPESAFE_API_KEY" | "OPENROUTER_API_KEY" | undefined;
+  try {
+    const p0 = resolveProvider();
+    existing = p0.apiKey;
+    existingVar = varNameFor(existing);
+  } catch { /* none */ }
   if (existing) {
     const keep = guard(await p.confirm({
-      message: `A TypeSafe key is already configured (…${existing.slice(-4)}). Keep it?`,
+      message: `A ${existingVar} key is already configured (…${existing.slice(-4)}). Keep it?`,
       initialValue: true,
     }));
-    if (!keep) existing = undefined;
+    if (!keep) { existing = undefined; existingVar = undefined; }
   }
 
   let apiKey = existing;
+  let varName = existingVar;
   let model: string | undefined;
   while (!apiKey) {
     const typed = guard(await p.password({
-      message: `Paste your TypeSafe API key (${CONSOLE_URL})`,
+      message: `Paste your TypeSafe or OpenRouter API key (${CONSOLE_URL})`,
       validate: (v) => (v?.trim() ? undefined : "The key is required: jgrep cannot run without it."),
     })).trim();
+    const v = varNameFor(typed);
+    const { endpoint, model: wireModel } = endpointFor(v);
     const s = p.spinner();
-    s.start("Checking the key against api.typesafe.ai");
+    s.start(v === "OPENROUTER_API_KEY" ? "Checking the key against openrouter.ai" : "Checking the key against api.typesafe.ai");
     try {
-      const r = await verifyApiKey(typed);
-      if (r.ok) { s.stop(`Key accepted (${r.model ?? "jev"})`); apiKey = typed; model = r.model; }
+      const r = await verifyApiKey(typed, fetch, endpoint, wireModel);
+      if (r.ok) { s.stop(`Key accepted (${r.model ?? "jev"})`); apiKey = typed; varName = v; model = r.model; }
       else { s.stop(`Rejected with HTTP ${r.status}`, 1); }
     } catch (e) {
       s.stop(`Could not reach the API: ${(e as Error).message}`, 1);
@@ -67,17 +84,17 @@ export async function init() {
       options: [
         { value: "global", label: "~/.config/jgrep/env", hint: "recommended: works in every project" },
         { value: "project", label: "./.env in this directory", hint: "add .env to .gitignore" },
-        { value: "none", label: "Don't save", hint: "I'll export TYPESAFE_API_KEY myself" },
+        { value: "none", label: "Don't save", hint: "I'll export the key myself" },
       ],
     }));
-    if (where === "global") p.log.success(`Saved to ${saveApiKey(apiKey)} (mode 600)`);
+    if (where === "global") p.log.success(`Saved to ${saveApiKey(apiKey, varName!)} (mode 600)`);
     else if (where === "project") {
-      fs.appendFileSync(".env", `TYPESAFE_API_KEY=${apiKey}\n`);
+      fs.appendFileSync(".env", `${varName}=${apiKey}\n`);
       p.log.success("Appended to ./.env");
       if (!fs.existsSync(".gitignore") || !fs.readFileSync(".gitignore", "utf8").split("\n").includes(".env")) {
         p.log.warn(".env is not in .gitignore");
       }
-    } else p.log.info(`Not saved. Use: export TYPESAFE_API_KEY=…`);
+    } else p.log.info(`Not saved. Use: export ${varName}=…`);
   }
 
   // 3. agent skills (opt-in)

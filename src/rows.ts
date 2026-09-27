@@ -66,7 +66,7 @@ export function loadQuestions(fileOrText: string): Questions {
 // ---- request ----------------------------------------------------------------
 export const MAX_QUESTIONS_PER_REQUEST = 64;
 
-export function buildRowsRequest(rows: Row[], questions: Questions) {
+export function buildRowsRequest(rows: Row[], questions: Questions, model: string = MODEL) {
   const state = { rows: rows.map((r, i) => ({ id: `r${i}`, ...r })) };
   const qs: Record<string, unknown> = {};
   rows.forEach((_, i) => {
@@ -74,13 +74,14 @@ export function buildRowsRequest(rows: Row[], questions: Questions) {
       qs[`r${i}.${name}`] = { ...spec, instructions: `Look only at the row with id "r${i}". ${spec.instructions}` };
     }
   });
-  return { model: MODEL, state, questions: qs };
+  return { model, state, questions: qs };
 }
 
 const key = (qJson: string, r: Row) => createHash("sha1").update(`${MODEL}\0rows\0${qJson}\0${JSON.stringify(r)}`).digest("hex");
 
 export interface RowsOptions {
   batch: number; concurrency: number; apiKey: string;
+  endpoint?: string; model?: string;
   timeoutSec?: number;         // per-batch deadline, retries included (defaults shared with jgrep)
   requestTimeoutSec?: number;  // per attempt
   maxRetries?: number;         // failed attempts tolerated before the final error
@@ -125,8 +126,9 @@ export async function scoreRows(rows: Row[], questions: Questions, o: RowsOption
   // throws the pool result away.
   let hadSuccess = false;
   const worker = async (b: number[], index: number): Promise<PackOutcome> => {
-    const res = await postSystemOne(buildRowsRequest(b.map((i) => rows[i]), questions), o.apiKey, {
+    const res = await postSystemOne(buildRowsRequest(b.map((i) => rows[i]), questions, o.model), o.apiKey, {
       ...post,
+      endpoint: o.endpoint,
       deadlineMs: Date.now() + timeoutMs, // per-batch deadline, retries included
     });
     tokens += res.usage?.input_tokens ?? 0;

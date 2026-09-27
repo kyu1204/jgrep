@@ -142,6 +142,7 @@ export interface PostOpts {
   maxRetries?: number;                   // default 4 (=> 5 total attempts)
   sleep?: (ms: number) => Promise<void>; // DI for tests
   limiter?: RateLimiter;                 // shared token bucket
+  endpoint?: string;                     // override the default TypeSafe ENDPOINT (issue #7: OpenRouter / JGREP_ENDPOINT)
 }
 
 const headersFor = (apiKey: string): Record<string, string> => ({
@@ -256,7 +257,7 @@ export async function postSystemOne(
     let retryAfterRaw: string | null = null;
 
     try {
-      const res = await fetchImpl(ENDPOINT, {
+      const res = await fetchImpl(opts.endpoint ?? ENDPOINT, {
         method: "POST",
         headers: headersFor(apiKey),
         body: json,

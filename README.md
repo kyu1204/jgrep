@@ -57,6 +57,27 @@ mkdir -p ~/.config/jgrep && echo 'TYPESAFE_API_KEY=...' > ~/.config/jgrep/env   
 ```
 </details>
 
+### Other endpoints
+
+Got Jev through OpenRouter instead of TypeSafe? Set `OPENROUTER_API_KEY`
+(sk-or-... — `jgrep init` detects it) instead of `TYPESAFE_API_KEY`; jgrep
+sends requests to OpenRouter's System One endpoint with the matching model
+id. Answers are cached by logical model name, so results are shared with the
+TypeSafe endpoint.
+
+```bash
+export OPENROUTER_API_KEY=sk-or-...
+jgrep "reads a CSV file" src/
+```
+
+`JGREP_ENDPOINT` overrides the URL for either key — point it at a local stub
+for tests or CI, without touching typesafe.ai or openrouter.ai:
+
+```bash
+export TYPESAFE_API_KEY=test-key JGREP_ENDPOINT=http://127.0.0.1:8765
+jgrep "reads a CSV file" src/
+```
+
 ## Use
 
 ### Find code by behavior
