@@ -95,6 +95,19 @@ export async function init() {
         p.log.warn(".env is not in .gitignore");
       }
     } else p.log.info(`Not saved. Use: export ${varName}=…`);
+
+    // A rejected key can still be live elsewhere (a shell-exported var, or the other
+    // var already sitting in ./.env / the global config) and would keep outranking
+    // what was just saved — resolveProvider() reads the real precedence, so re-run
+    // it and warn rather than silently leaving the new key unused.
+    if (where !== "none") {
+      try {
+        const picked = resolveProvider();
+        if (picked.apiKey !== apiKey) {
+          p.log.warn(`A different key still takes precedence (TYPESAFE_API_KEY wins over OPENROUTER_API_KEY, and an exported env var wins over saved files) — unset it or remove it from ./.env for ${varName} to take effect.`);
+        }
+      } catch { /* resolveProvider() only throws with no key at all — nothing to warn about */ }
+    }
   }
 
   // 3. agent skills (opt-in)

@@ -299,11 +299,22 @@ function readVar(name: string, env = process.env): string | undefined {
 
 export interface Provider { apiKey: string; endpoint: string; model: string }
 
+/** JGREP_ENDPOINT carries the API key's Authorization header wherever it points — reject
+ *  plain http:// except to loopback (local stubs) so a key is never handed to a
+ *  cleartext remote endpoint (e.g. one read from a project's own untrusted ./.env). */
+function checkEndpoint(url: string): string {
+  const u = new URL(url);
+  if (u.protocol === "http:" && !["localhost", "127.0.0.1", "::1"].includes(u.hostname))
+    throw new Error(`JGREP_ENDPOINT must be https:// (or a loopback http:// stub): ${url}`);
+  return url;
+}
+
 /** Endpoint + wire model id picked from whichever key is present (TYPESAFE_API_KEY wins
  *  when both are set); JGREP_ENDPOINT overrides the URL only, keeping the key's model.
  *  See issue #7. */
 export function resolveProvider(env = process.env): Provider {
-  const override = readVar("JGREP_ENDPOINT", env);
+  const rawOverride = readVar("JGREP_ENDPOINT", env);
+  const override = rawOverride === undefined ? undefined : checkEndpoint(rawOverride);
   const typesafe = readVar("TYPESAFE_API_KEY", env);
   if (typesafe) return { apiKey: typesafe, endpoint: override ?? ENDPOINT, model: MODEL };
   const openrouter = readVar("OPENROUTER_API_KEY", env);
