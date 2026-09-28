@@ -124,7 +124,7 @@ would turn an outage or an expired secret into a passing check.
 The same gate as a one-liner, plus test selection (`mode: tests`):
 
 ```yaml
-- uses: actions/checkout@v4
+- uses: actions/checkout@v5
   with: { fetch-depth: 0 }
 - uses: kyu1204/jgrep-action@v1
   with: { mode: diff, rule: "adds an HTTP endpoint that has no auth check", api-key: "${{ secrets.TYPESAFE_API_KEY }}" }
