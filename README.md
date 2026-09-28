@@ -2,7 +2,8 @@
 
 # jgrep
 
-**grep for what code *does*, not what it's called.**
+**grep for what code *does*, not what it's called.**<br>
+**Gate PRs on it. Run only the tests a diff can affect.**
 
 ```
 jgrep "catches an error and silently ignores it" src/
@@ -15,6 +16,12 @@ jgrep "catches an error and silently ignores it" src/
 [![openrouter](https://img.shields.io/badge/also%20via-OpenRouter-6467f2)](https://openrouter.ai/typesafe)
 
 *No index. No embeddings. No LLM round-trips. A whole `src/` tree in ~2 s for about a cent.*
+
+*On five OSS repos, `--tests` picked 12% of the test files and still caught over 90% of the
+tests each commit's author changed, for $0.11 across 60 commits ([bench](bench/tests/README.md)).*
+
+<sub>Not [@dzhng/jevgrep](https://github.com/dzhng/jevgrep) (`jg`), a separate code-discovery CLI.
+This project is `jgrep`, published on npm as `jevgrep`.</sub>
 
 <img src="docs/demo.gif" alt="jgrep demo: semantic search over src/ and a git diff" width="900">
 
