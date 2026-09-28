@@ -135,3 +135,16 @@ test("e2e: JGREP_ENDPOINT sends requests to the stub with the OpenRouter key/mod
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }, 10_000);
+
+test("headersFor: OpenRouter endpoints get attribution headers, others none", async () => {
+  const { headersFor } = await import("./providers");
+  const h = headersFor("k", OPENROUTER_ENDPOINT);
+  expect(h["HTTP-Referer"]).toBe("https://github.com/kyu1204/jgrep");
+  expect(h["X-OpenRouter-Title"]).toBe("jgrep");
+  expect(h["X-Title"]).toBe("jgrep");
+  expect(h["X-OpenRouter-Categories"]).toBe("cli-agent");
+  for (const ep of [ENDPOINT, "http://127.0.0.1:9999/x", "https://evil.example/openrouter.ai"]) {
+    const n = headersFor("k", ep);
+    expect(Object.keys(n).sort()).toEqual(["Authorization", "Content-Type"]);
+  }
+});

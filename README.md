@@ -67,7 +67,10 @@ Got Jev through OpenRouter instead of TypeSafe? Set `OPENROUTER_API_KEY`
 (sk-or-... — `jgrep init` detects it) instead of `TYPESAFE_API_KEY`; jgrep
 sends requests to OpenRouter's System One endpoint with the matching model
 id. Answers are cached by logical model name, so results are shared with the
-TypeSafe endpoint.
+TypeSafe endpoint. Requests to openrouter.ai also carry OpenRouter's
+app-attribution headers (`HTTP-Referer`, `X-OpenRouter-Title: jgrep`,
+`X-OpenRouter-Categories: cli-agent`) so jgrep appears in its app rankings;
+no other endpoint gets them.
 
 ```bash
 export OPENROUTER_API_KEY=sk-or-...

@@ -145,10 +145,19 @@ export interface PostOpts {
   endpoint?: string;                     // override the default TypeSafe ENDPOINT (issue #7: OpenRouter / JGREP_ENDPOINT)
 }
 
-const headersFor = (apiKey: string): Record<string, string> => ({
-  Authorization: `Bearer ${apiKey}`,
-  "Content-Type": "application/json",
-});
+/** Auth headers; OpenRouter endpoints also get app-attribution headers (openrouter.ai/docs/app-attribution). */
+export const headersFor = (apiKey: string, endpoint: string = ENDPOINT): Record<string, string> => {
+  const h: Record<string, string> = { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
+  let host = "";
+  try { host = new URL(endpoint).hostname; } catch { /* not a URL: no attribution */ }
+  if (host === "openrouter.ai" || host.endsWith(".openrouter.ai")) {
+    h["HTTP-Referer"] = "https://github.com/kyu1204/jgrep";
+    h["X-OpenRouter-Title"] = "jgrep";
+    h["X-Title"] = "jgrep";
+    h["X-OpenRouter-Categories"] = "cli-agent";
+  }
+  return h;
+};
 
 const detailOf = (err: unknown): string => {
   if (err != null && typeof err === "object") {
@@ -259,7 +268,7 @@ export async function postSystemOne(
     try {
       const res = await fetchImpl(opts.endpoint ?? ENDPOINT, {
         method: "POST",
-        headers: headersFor(apiKey),
+        headers: headersFor(apiKey, opts.endpoint),
         body: json,
         signal,
       });
