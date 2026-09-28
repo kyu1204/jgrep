@@ -8,7 +8,7 @@ import {
   classifyStatus, classifyTransport, jitteredDelayMs, parseRetryAfter, JevProviderError,
   RETRY_AFTER_MAX_MS, type JevErrorKind,
 } from "./errors";
-import { ENDPOINT } from "./jgrep";
+import { ENDPOINT, type Usage } from "./jgrep";
 
 /** Ambient monotonic clock — the token bucket must not jump when the wall clock is adjusted. */
 declare const performance: { now(): number };
@@ -217,7 +217,7 @@ export async function postSystemOne(
   body: unknown,
   apiKey: string,
   opts: PostOpts = {},
-): Promise<{ answers: Record<string, any>; usage?: { input_tokens: number } }> {
+): Promise<{ answers: Record<string, any>; usage?: Usage }> {
   const fetchImpl = opts.fetchImpl ?? fetch;
   const maxRetries = opts.maxRetries ?? 4;
   const requestTimeoutMs = opts.requestTimeoutMs ?? REQUEST_TIMEOUT_MS;
@@ -289,7 +289,7 @@ export async function postSystemOne(
           throw malformedResponseError(text.slice(0, SNIPPET_MAX));
         }
         const p = parsed as Record<string, any>;
-        const usage = p.usage !== null && typeof p.usage === "object" ? (p.usage as { input_tokens: number }) : undefined;
+        const usage = p.usage !== null && typeof p.usage === "object" ? (p.usage as Usage) : undefined;
         return {
           answers: p.answers as Record<string, any>,
           usage,

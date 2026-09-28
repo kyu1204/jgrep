@@ -19,6 +19,11 @@ export const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/systemone";
 export const OPENROUTER_MODEL = "~typesafe/jev-latest";
 export const USD_PER_M_INPUT = 0.042;
 
+export interface Usage { input_tokens?: number; cost?: number }
+/** Provider-reported cost when present (OpenRouter sends usage.cost), else list price x input tokens. */
+export const costOf = (u?: Usage): number =>
+  typeof u?.cost === "number" ? u.cost : ((u?.input_tokens ?? 0) * USD_PER_M_INPUT) / 1e6;
+
 export interface Chunk { file: string; start: number; end: number; text: string }
 export interface Hit extends Chunk { p: number }
 export type Kind = "code" | "diff";
@@ -167,7 +172,7 @@ export interface Options {
   fetchImpl?: Fetch; cache?: Cache; onProgress?: (done: number, total: number) => void;
 }
 export interface ChunkError { file: string; start: number; end: number; kind: JevErrorKind; message: string }
-export interface Result { hits: Hit[]; all: Hit[]; chunks: number; tokens: number; cached: number; errors: ChunkError[] }
+export interface Result { hits: Hit[]; all: Hit[]; chunks: number; tokens: number; cost: number; cached: number; errors: ChunkError[] }
 
 /** What one batch worker hands back; runPool results are completion-ordered, so the
  *  batch index rides along and `all` is re-associated after the pool settles. A
@@ -205,7 +210,7 @@ export async function jgrep(question: string, chunks: Chunk[], o: Options): Prom
     maxRetries: o.maxRetries ?? DEFAULT_MAX_RETRIES,
     limiter: o.ratePerSec && o.ratePerSec > 0 ? new RateLimiter(o.ratePerSec, Math.max(1, o.concurrency)) : undefined,
   };
-  let tokens = 0;
+  let tokens = 0, cost = 0;
   // Run-level success flag: drives the invalid_api_key expired-vs-wrong-key hint.
   // Tracked HERE (not PoolResult) because failFast throws the pool result away.
   let hadSuccess = false;
@@ -216,6 +221,7 @@ export async function jgrep(question: string, chunks: Chunk[], o: Options): Prom
       deadlineMs: Date.now() + timeoutMs, // per-batch deadline, retries included
     });
     tokens += res.usage?.input_tokens ?? 0;
+    cost += costOf(res.usage);
     // Finite p-values go straight into the in-memory cache object: cli.ts persists it in
     // a finally, so answers paid for survive even when other batches fail. A chunk the
     // provider did not answer (missing or non-finite p on a 200) is skipped here and
@@ -278,7 +284,7 @@ export async function jgrep(question: string, chunks: Chunk[], o: Options): Prom
   const hits: Hit[] = [];
   const ordered: Hit[] = [];
   for (const h of all) if (h) { ordered.push(h); if (h.p >= o.threshold) hits.push(h); }
-  return { hits, all: ordered, chunks: chunks.length, tokens, cached, errors };
+  return { hits, all: ordered, chunks: chunks.length, tokens, cost, cached, errors };
 }
 
 // ---- config -----------------------------------------------------------------

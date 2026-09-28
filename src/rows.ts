@@ -8,7 +8,7 @@ import { runPool, type PoolResult } from "./pool";
 import { isFatalError, JevProviderError, type JevErrorKind } from "./errors";
 import {
   DEFAULT_MAX_RETRIES, DEFAULT_REQUEST_TIMEOUT_SEC, DEFAULT_TIMEOUT_SEC, KEY_WORKED_EARLIER_HINT,
-  MODEL, type Cache, type Fetch,
+  MODEL, costOf, type Cache, type Fetch,
 } from "./jgrep";
 
 export type Row = Record<string, string>;
@@ -93,7 +93,7 @@ export interface RowsOptions {
 export interface RowError { row: number; kind: JevErrorKind; message: string }
 /** answers is position-aligned with the input rows and DENSE: an errored row maps to null,
  *  never a hole (a holey array would desync `map` consumers from the row indices). */
-export interface RowsResult { answers: (Record<string, Answer> | null)[]; tokens: number; cached: number; requests: number; errors: RowError[] }
+export interface RowsResult { answers: (Record<string, Answer> | null)[]; tokens: number; cost: number; cached: number; requests: number; errors: RowError[] }
 
 /** One request-pack's outcome; runPool results are completion-ordered, so the pack
  *  index rides along and `answers` is re-associated after the pool settles. */
@@ -120,7 +120,7 @@ export async function scoreRows(rows: Row[], questions: Questions, o: RowsOption
     maxRetries: o.maxRetries ?? DEFAULT_MAX_RETRIES,
     limiter: o.ratePerSec && o.ratePerSec > 0 ? new RateLimiter(o.ratePerSec, Math.max(1, o.concurrency)) : undefined,
   };
-  let tokens = 0;
+  let tokens = 0, cost = 0;
   // Run-level success flag, same rule as jgrep(): drives the invalid_api_key
   // expired-vs-wrong-key hint. Tracked HERE (not PoolResult) because failFast
   // throws the pool result away.
@@ -132,6 +132,7 @@ export async function scoreRows(rows: Row[], questions: Questions, o: RowsOption
       deadlineMs: Date.now() + timeoutMs, // per-batch deadline, retries included
     });
     tokens += res.usage?.input_tokens ?? 0;
+    cost += costOf(res.usage);
     const rowResults = b.map((ri, j) => {
       const a: Record<string, Answer> = {};
       for (const name of Object.keys(questions)) a[name] = res.answers[`r${j}.${name}`] ?? { type: "missing" };
@@ -181,7 +182,7 @@ export async function scoreRows(rows: Row[], questions: Questions, o: RowsOption
   }
   // `requests` counts only packs the breaker actually attempted; packs it never
   // dispatched are not requests.
-  return { answers, tokens, cached: rows.length - todo.length, requests: batches.length - (pool.aborted ? pool.unprocessed : 0), errors };
+  return { answers, tokens, cost, cached: rows.length - todo.length, requests: batches.length - (pool.aborted ? pool.unprocessed : 0), errors };
 }
 
 // ---- output -----------------------------------------------------------------

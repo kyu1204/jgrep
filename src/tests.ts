@@ -7,7 +7,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import {
   DEFAULT_MAX_RETRIES, DEFAULT_REQUEST_TIMEOUT_SEC, DEFAULT_TIMEOUT_SEC, KEY_WORKED_EARLIER_HINT,
-  MODEL, listFiles, type Cache, type Fetch,
+  MODEL, costOf, listFiles, type Cache, type Fetch,
 } from "./jgrep";
 import { postSystemOne, RateLimiter, type PostOpts } from "./providers";
 import { runPool, type PoolResult } from "./pool";
@@ -96,7 +96,7 @@ export interface SelectOptions {
   fetchImpl?: Fetch; cache?: Cache; onProgress?: (done: number, total: number) => void;
 }
 
-export interface SelectResult { selected: Selected[]; all: Selected[]; tokens: number; requests: number; cached: number; errors: TestError[] }
+export interface SelectResult { selected: Selected[]; all: Selected[]; tokens: number; cost: number; requests: number; cached: number; errors: TestError[] }
 
 /** One request-pack's outcome; runPool results are completion-ordered, so the batch
  *  index rides along and `all` is re-associated after the pool settles. A partial 200
@@ -137,7 +137,7 @@ export async function selectTests(diff: string, tests: TestFile[], o: SelectOpti
     maxRetries: o.maxRetries ?? DEFAULT_MAX_RETRIES,
     limiter: o.ratePerSec && o.ratePerSec > 0 ? new RateLimiter(o.ratePerSec, Math.max(1, o.concurrency)) : undefined,
   };
-  let tokens = 0;
+  let tokens = 0, cost = 0;
   // Run-level success flag, same rule as jgrep()/scoreRows(): drives the
   // invalid_api_key expired-vs-wrong-key hint. Tracked HERE (not PoolResult) because
   // failFast throws the pool result away.
@@ -154,6 +154,7 @@ export async function selectTests(diff: string, tests: TestFile[], o: SelectOpti
       deadlineMs: Date.now() + timeoutMs, // per-batch deadline, retries included
     });
     tokens += res.usage?.input_tokens ?? 0;
+    cost += costOf(res.usage);
     // Finite p-values go straight into the in-memory cache object: cli.ts persists it in
     // a finally, so answers paid for survive even when other batches fail.
     const entries: { testIndex: number; p: number }[] = [];
@@ -218,7 +219,7 @@ export async function selectTests(diff: string, tests: TestFile[], o: SelectOpti
   const answered = all.filter((s): s is Selected => s !== undefined);
   const selected = answered.filter((s) => s.p >= o.threshold).sort((a, b) => b.p - a.p);
   const byCode = answered.filter((s) => s.reason === "direct" || s.reason === "import").length;
-  return { selected, all: answered, tokens, requests: batches.length - (pool.aborted ? pool.unprocessed : 0), cached: tests.length - byCode - todo.length, errors };
+  return { selected, all: answered, tokens, cost, requests: batches.length - (pool.aborted ? pool.unprocessed : 0), cached: tests.length - byCode - todo.length, errors };
 }
 
 export function loadTests(paths: string[] = ["."]): TestFile[] {

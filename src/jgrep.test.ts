@@ -140,3 +140,10 @@ test("rows: request keys, batching cap, cache and flatten", async () => {
   expect(r2.requests).toBe(0);
   expect(r2.cached).toBe(40);
 });
+
+test("costOf prefers provider-reported cost and falls back to list price", async () => {
+  const { costOf } = await import("./jgrep");
+  expect(costOf({ input_tokens: 274, cost: 0.00002 })).toBe(0.00002);
+  expect(costOf({ input_tokens: 1_000_000 })).toBeCloseTo(0.042, 10);
+  expect(costOf(undefined)).toBe(0);
+});

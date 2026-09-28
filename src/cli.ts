@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import fs from "node:fs";
-import { chunkPaths, diffChunks, gitDiff, jgrep, loadCache, saveCache, resolveProvider, USD_PER_M_INPUT, type Hit, type Kind } from "./jgrep";
+import { chunkPaths, diffChunks, gitDiff, jgrep, loadCache, saveCache, resolveProvider, type Hit, type Kind } from "./jgrep";
 import { readRows, loadQuestions, scoreRows, flattenAnswers, toCsv } from "./rows";
 import { loadTests, selectTests } from "./tests";
 import { JevProviderError } from "./errors";
@@ -174,7 +174,7 @@ async function main() {
         if (o.show) console.log(h.text.split("\n").map((l) => "    " + l).join("\n") + "\n");
       }
     }
-    const cost = (r.tokens * USD_PER_M_INPUT) / 1e6;
+    const cost = r.cost;
     const summary = `${r.hits.length} hits / ${r.chunks} chunks (${r.cached} cached) · ${r.tokens} tokens · $${cost.toFixed(4)} · ${((Date.now() - t0) / 1000).toFixed(1)}s`;
     console.error(c("90", r.errors.length ? summary + erroredSuffix(r.errors) : summary));
     printExamples(r.errors.map((e) => ({ line: `  ${e.kind}: ${e.file}:${e.start}-${e.end} ${e.message.slice(0, 120)}` })));
@@ -207,7 +207,7 @@ async function testsMain(o: ReturnType<typeof parse>) {
     const rows = o.all ? [...r.all].sort((a, b) => b.p - a.p) : r.selected;
     if (o.json) console.log(JSON.stringify(rows, null, 2));
     else for (const s of rows) console.log(o.all || process.stdout.isTTY ? `${s.file}${c("90", `  p=${s.p.toFixed(2)} ${s.reason}`)}` : s.file);
-    const cost = (r.tokens * USD_PER_M_INPUT) / 1e6;
+    const cost = r.cost;
     const summary = `${r.selected.length} of ${tests.length} tests selected (${r.all.filter((s) => s.reason === "direct" || s.reason === "import").length} by name/import, ${r.cached} cached) · ${r.requests} requests · ${r.tokens} tokens · $${cost.toFixed(4)} · ${((Date.now() - t0) / 1000).toFixed(1)}s`;
     console.error(c("90", r.errors.length ? summary + erroredSuffix(r.errors) : summary));
     printExamples(r.errors.map((e) => ({ line: `  ${e.kind}: ${e.file} ${e.message.slice(0, 120)}`, hint: e.hint })));
@@ -263,7 +263,7 @@ async function rowsMain(o: ReturnType<typeof parse>) {
         console.log(`${c("35", o.rows)}${c("36", ":")}${c("32", String(s.i + 2))}  ${c(pcol, `p=${s.p.toFixed(2)}`)}  ${preview}`);
       }
     }
-    const cost = (r.tokens * USD_PER_M_INPUT) / 1e6;
+    const cost = r.cost;
     const summary = `${o.questions ? Object.keys(questions).length + " questions x " : hits + " hits / "}${rows.length} rows (${r.cached} cached) · ${r.requests} requests · ${r.tokens} tokens · $${cost.toFixed(4)} · ${((Date.now() - t0) / 1000).toFixed(1)}s`;
     console.error(c("90", r.errors.length ? summary + erroredSuffix(r.errors) : summary));
     printExamples(r.errors.map((e) => ({ line: `  ${e.kind}: row ${e.row} ${e.message.slice(0, 120)}` })));
