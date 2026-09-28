@@ -1,0 +1,8 @@
+{
+  "name": "jgrep",
+  "description": "Semantic grep skill: find code by what it does, and lint your own diff.",
+  "author": { "name": "kyu1204" },
+  "homepage": "https://github.com/kyu1204/jgrep",
+  "repository": "https://github.com/kyu1204/jgrep",
+  "license": "MIT"
+}

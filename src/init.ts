@@ -19,7 +19,7 @@ export const varNameFor = (key: string): "TYPESAFE_API_KEY" | "OPENROUTER_API_KE
   key.startsWith("sk-or-") ? "OPENROUTER_API_KEY" : "TYPESAFE_API_KEY";
 const endpointFor = (varName: "TYPESAFE_API_KEY" | "OPENROUTER_API_KEY") =>
   varName === "OPENROUTER_API_KEY" ? { endpoint: OPENROUTER_ENDPOINT, model: OPENROUTER_MODEL } : { endpoint: ENDPOINT, model: MODEL };
-const SKILL_SRC = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "skill", "SKILL.md");
+const SKILL_SRC = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "skills", "jgrep", "SKILL.md");
 
 function bail(msg = "Setup cancelled."): never {
   p.cancel(msg);

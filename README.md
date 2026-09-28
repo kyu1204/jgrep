@@ -185,6 +185,13 @@ jgrep init                   # tick "Claude Code" / "Codex" to install the skill
 jgrep --json "spawns a child process" src/ | jq '.[].file'
 ```
 
+Or install the skill as a Claude Code plugin (needs `npm i -g jevgrep` too):
+
+```
+/plugin marketplace add kyu1204/jgrep
+/plugin install jgrep@jgrep
+```
+
 The skill also has the agent run a few `--diff --staged` rules on its own
 change before committing: a second model checking the first one's work, for
 a fraction of a cent.

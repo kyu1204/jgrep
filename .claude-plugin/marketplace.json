@@ -1,0 +1,11 @@
+{
+  "name": "jgrep",
+  "owner": { "name": "kyu1204" },
+  "plugins": [
+    {
+      "name": "jgrep",
+      "source": "./",
+      "description": "Semantic grep skill: find code by what it does, and lint your own diff."
+    }
+  ]
+}

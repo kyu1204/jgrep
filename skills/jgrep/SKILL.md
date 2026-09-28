@@ -12,6 +12,9 @@ description: >-
 
 # jgrep
 
+First run `command -v jgrep`. If it prints nothing, tell the user to run
+`npm i -g jevgrep && jgrep init` and stop; do not install it yourself.
+
 `jgrep "<description in English>" [paths]` asks a fast decision model (TypeSafe
 Jev) one yes/no question per 5-60 line chunk and prints the chunks that match.
 It never reads files into your context: you get a short list, then you Read
