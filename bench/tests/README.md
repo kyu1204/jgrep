@@ -68,7 +68,7 @@ not a benchmark artifact.
 
 ### hono
 
-| commit | |G| | T | |S| | recall | code-only recall | jev-added | extra | tokens | $ cost | s |
+| commit | \|G\| | T | \|S\| | recall | code-only recall | jev-added | extra | tokens | $ cost | s |
 |---|---|---|---|---|---|---|---|---|---|---|
 | 6cadf75 | 1 | 139 | 9 | 1.00 | 1.00 | 0 | 8 | 64155 | $0.0027 | 1.17 |
 | de310ac | 1 | 139 | 11 | 1.00 | 1.00 | 0 | 10 | 60015 | $0.0025 | 1.20 |
@@ -85,7 +85,7 @@ not a benchmark artifact.
 
 ### zod
 
-| commit | |G| | T | |S| | recall | code-only recall | jev-added | extra | tokens | $ cost | s |
+| commit | \|G\| | T | \|S\| | recall | code-only recall | jev-added | extra | tokens | $ cost | s |
 |---|---|---|---|---|---|---|---|---|---|---|
 | cc4cd4e | 5 | 204 | 30 | 0.80 | 0.00 | 4 | 26 | 97112 | $0.0041 | 1.12 |
 | ca0229a | 5 | 204 | 100 | 1.00 | 0.00 | 5 | 95 | 97063 | $0.0041 | 1.17 |
@@ -102,7 +102,7 @@ not a benchmark artifact.
 
 ### fastify
 
-| commit | |G| | T | |S| | recall | code-only recall | jev-added | extra | tokens | $ cost | s |
+| commit | \|G\| | T | \|S\| | recall | code-only recall | jev-added | extra | tokens | $ cost | s |
 |---|---|---|---|---|---|---|---|---|---|---|
 | 4a3e325 | 1 | 234 | 20 | 1.00 | 1.00 | 0 | 19 | 66552 | $0.0028 | 1.28 |
 | 13d61c5 | 1 | 234 | 34 | 1.00 | 0.00 | 1 | 33 | 63610 | $0.0027 | 1.09 |
@@ -119,7 +119,7 @@ not a benchmark artifact.
 
 ### flask
 
-| commit | |G| | T | |S| | recall | code-only recall | jev-added | extra | tokens | $ cost | s |
+| commit | \|G\| | T | \|S\| | recall | code-only recall | jev-added | extra | tokens | $ cost | s |
 |---|---|---|---|---|---|---|---|---|---|---|
 | 8999295 | 1 | 69 | 2 | 1.00 | 0.00 | 1 | 1 | 13276 | $0.0006 | 1.01 |
 | 7203fea | 1 | 69 | 3 | 0.00 | 0.00 | 0 | 3 | 13420 | $0.0006 | 0.96 |
@@ -136,7 +136,7 @@ not a benchmark artifact.
 
 ### requests
 
-| commit | |G| | T | |S| | recall | code-only recall | jev-added | extra | tokens | $ cost | s |
+| commit | \|G\| | T | \|S\| | recall | code-only recall | jev-added | extra | tokens | $ cost | s |
 |---|---|---|---|---|---|---|---|---|---|---|
 | 6f66281 | 1 | 40 | 2 | 1.00 | 0.00 | 1 | 1 | 7506 | $0.0003 | 0.88 |
 | 6f205ff | 1 | 40 | 2 | 1.00 | 0.00 | 1 | 1 | 6684 | $0.0003 | 0.94 |
