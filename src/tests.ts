@@ -14,7 +14,7 @@ import { runPool, type PoolResult } from "./pool";
 import { isFatalError, JevProviderError, type JevErrorKind } from "./errors";
 
 export interface TestFile { file: string; signature: string }
-export interface Selected { file: string; p: number; reason: "direct" | "import" | "jev" | "cached" }
+export interface Selected { file: string; p: number; reason: "direct" | "import" | "package" | "jev" | "cached" }
 
 // ponytail: patterns cover js/ts, python, go, ruby, rust, java, elixir; add flags when a stack is missing.
 export const TEST_FILE_RE = /(^|\/)(tests?|__tests__|spec|specs)\/|(\.|_)(test|spec|tst|test-d)\.[cm]?[jt]sx?$|(^|\/)test_[^/]*\.py$|_test\.(py|go|rb|exs)$|_spec\.rb$|(^|\/)[^/]*Tests?\.(java|kt|swift|cs)$|(^|\/)tests\.rs$/;
@@ -83,6 +83,41 @@ export function importMatches(changedFiles: string[], tests: TestFile[]): Set<st
   return out;
 }
 
+const rd = (f: string) => { try { return fs.readFileSync(f, "utf8"); } catch { return ""; } };
+const exists = (f: string) => { try { return fs.statSync(f).isFile(); } catch { return false; } };
+
+/** Root-importing tests ("import zod", "../src", "import flask") selected in code when a changed file is part of
+ *  that package's public surface: its entry file (src/index.*, __init__.py).
+ *  Package name and entry come from package.json / the __init__.py tree, no network. */
+export function packageMatches(changedFiles: string[], tests: TestFile[], read = rd, has = exists): Set<string> {
+  const out = new Set<string>();
+  const roots: RegExp[] = [];
+  for (const f of changedFiles) {
+    if (TEST_FILE_RE.test(f) || NOISE_RE.test(f)) continue;
+    const dirs = f.split("/").slice(0, -1);
+    let name = "", entry = "";
+    if (/\.py$/.test(f)) { // topmost dir of the consecutive __init__.py chain is the package
+      for (let i = dirs.length; i > 0; i--) if (has([...dirs.slice(0, i), "__init__.py"].join("/"))) { name = dirs[i - 1]; entry = [...dirs.slice(0, i), "__init__.py"].join("/"); }
+    } else {
+      for (let i = dirs.length; i >= 0 && !name; i--) {
+        const pj = [...dirs.slice(0, i), "package.json"].join("/");
+        if (!has(pj)) continue;
+        try { name = JSON.parse(read(pj)).name ?? ""; } catch { /* unreadable package.json: no package rule */ }
+        const base = dirs.slice(0, i).join("/");
+        entry = ["src/index", "index"].flatMap((e) => ["ts", "js", "mts", "mjs", "tsx"].map((x) => [base, `${e}.${x}`].filter(Boolean).join("/"))).find(has) ?? "";
+      }
+    }
+    if (!name || !entry) continue;
+    if (f !== entry) continue; // ponytail: entry file only; counting its re-exports selects ~every test in small libs (flask 0.11 -> 0.39 ratio)
+    const n = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    roots.push(entry.endsWith(".py")
+      ? new RegExp(`^\\s*(import\\s+${n}\\b|from\\s+${n}\\s+import)`, "m")
+      : new RegExp(`(?:from|require\\(|import)\\s*["'](?:${n}(?:/[^"']*)?|(?:\\.\\.?/)+(?:src(?:/index)?|index)(?:\\.\\w+)?|\\.\\.?)["']`));
+  }
+  if (roots.length) for (const t of tests) if (roots.some((r) => r.test(t.signature))) out.add(t.file);
+  return out;
+}
+
 export interface TestError { file: string; kind: JevErrorKind; message: string; hint?: string }
 
 export interface SelectOptions {
@@ -112,6 +147,7 @@ export async function selectTests(diff: string, tests: TestFile[], o: SelectOpti
   const changed = changedFilesOf(diff);
   const direct = directMatches(changed, tests.map((t) => t.file));
   const viaImport = importMatches(changed, tests);
+  const viaPackage = packageMatches(changed, tests);
   const diffHash = createHash("sha1").update(compact).digest("hex");
   const key = (t: TestFile) => createHash("sha1").update(`${MODEL}\0tests\0${diffHash}\0${t.file}\0${t.signature}`).digest("hex");
 
@@ -120,6 +156,7 @@ export async function selectTests(diff: string, tests: TestFile[], o: SelectOpti
   tests.forEach((t, i) => {
     if (direct.has(t.file)) all[i] = { file: t.file, p: 1, reason: "direct" };
     else if (viaImport.has(t.file)) all[i] = { file: t.file, p: 1, reason: "import" };
+    else if (viaPackage.has(t.file)) all[i] = { file: t.file, p: 1, reason: "package" };
     else if (typeof cache[key(t)] === "number") all[i] = { file: t.file, p: cache[key(t)], reason: "cached" };
     else todo.push(i);
   });
@@ -218,7 +255,7 @@ export async function selectTests(diff: string, tests: TestFile[], o: SelectOpti
   // they surface through the returned errors and the caller's exit code.
   const answered = all.filter((s): s is Selected => s !== undefined);
   const selected = answered.filter((s) => s.p >= o.threshold).sort((a, b) => b.p - a.p);
-  const byCode = answered.filter((s) => s.reason === "direct" || s.reason === "import").length;
+  const byCode = answered.filter((s) => s.reason === "direct" || s.reason === "import" || s.reason === "package").length;
   return { selected, all: answered, tokens, cost, requests: batches.length - (pool.aborted ? pool.unprocessed : 0), cached: tests.length - byCode - todo.length, errors };
 }
 

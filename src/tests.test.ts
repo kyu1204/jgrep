@@ -72,3 +72,20 @@ test("directMatches accepts an underscore separator before the test suffix (foo_
   const tests = ["src/foo_test.ts", "types/bar_tst.ts", "types/baz_test-d.ts", "src/other_test.ts"];
   expect([...directMatches(["src/foo.ts", "src/bar.ts", "src/baz.ts"], tests)].sort()).toEqual(["src/foo_test.ts", "types/bar_tst.ts", "types/baz_test-d.ts"]);
 });
+
+test("packageMatches selects root-importing tests when the public surface changes", async () => {
+  const { packageMatches } = await import("./tests");
+  const files: Record<string, string> = {
+    "pkg/package.json": '{"name":"zod"}', "pkg/src/index.ts": 'export * from "./schemas.js";\n',
+    "flask/src/flask/__init__.py": "from .app import Flask\nfrom . import cli\n", "src/flask/x.py": "",
+  };
+  const has = (f: string) => f in files || f === "src/flask/__init__.py" || f === "src/flask/app.py";
+  const read = (f: string) => files[f] ?? (f === "src/flask/__init__.py" ? files["flask/src/flask/__init__.py"] : "");
+  const t = (file: string, signature: string) => ({ file, signature });
+  const tests = [t("pkg/t/a.test.ts", 'import { z } from "zod"'), t("pkg/t/b.test.ts", 'import { z } from "../src"'), t("pkg/t/c.test.ts", 'import x from "lodash"'),
+    t("tests/test_a.py", "import flask"), t("tests/test_b.py", "from flask import Flask"), t("tests/test_c.py", "import os")];
+  expect([...packageMatches(["pkg/src/index.ts"], tests, read, has)].sort()).toEqual(["pkg/t/a.test.ts", "pkg/t/b.test.ts"]);
+  expect([...packageMatches(["pkg/src/schemas.ts"], tests, read, has)]).toEqual([]);
+  expect([...packageMatches(["src/flask/__init__.py"], tests, read, has)].sort()).toEqual(["tests/test_a.py", "tests/test_b.py"]);
+  expect([...packageMatches(["src/flask/app.py"], tests, read, has)]).toEqual([]);
+});

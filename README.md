@@ -127,7 +127,7 @@ jgrep --tests --staged -a                         # every test file with its pro
 ```
 
 Three layers, cheapest first: tests named after a changed file (`foo.ts` → `foo.test.ts`)
-and tests that import a changed module are selected in code; the rest are asked of Jev
+and tests that import a changed module (or the package root, when the package entry file changed) are selected in code; the rest are asked of Jev
 with the compacted diff (source files only, changed lines only) and each test file's
 imports and test names, one Noul per file. Default threshold is 0.5 here because a
 missed test costs more than an extra one. Run the full suite afterwards; this is for the
@@ -144,7 +144,7 @@ Selection itself: 7 requests, 56k tokens, $0.0024, 1.0 s. The suite above is fas
 runner startup dominates; the ratio matters more on suites that take minutes.
 
 On five OSS repos (hono, zod, fastify, flask, requests; 60 commits that changed both source
-and tests), `--tests` selected 12% of test files and caught 92% of the tests each commit's
+and tests), `--tests` selected 12% of test files and caught 93% of the tests each commit's
 author had touched, versus 43% from name and import matching alone; $0.11 total. Method and
 per-commit rows: [bench/tests](bench/tests/README.md).
 
