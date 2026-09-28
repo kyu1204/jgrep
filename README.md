@@ -145,7 +145,7 @@ runner startup dominates; the ratio matters more on suites that take minutes.
 
 On five OSS repos (hono, zod, fastify, flask, requests; 60 commits that changed both source
 and tests), `--tests` selected 12% of test files and caught 93% of the tests each commit's
-author had touched, versus 43% from name and import matching alone; $0.11 total. Method and
+author had touched, versus 45% from name, import and package-root matching alone; $0.11 total. Method and
 per-commit rows: [bench/tests](bench/tests/README.md).
 
 ### Score a table (CSV / JSONL), not just code
