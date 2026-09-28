@@ -360,6 +360,8 @@ export function installSkills(skillSrc: string, home = os.homedir(), agents = ["
     const base = path.join(home, `.${a}`);
     if (!fs.existsSync(base)) continue;
     const dir = path.join(base, "skills", "jgrep");
+    // A symlink here (old installs pointed at the repo) is dangling or would make the copy overwrite the repo file.
+    try { if (fs.lstatSync(dir).isSymbolicLink()) fs.unlinkSync(dir); } catch {}
     fs.mkdirSync(dir, { recursive: true });
     fs.copyFileSync(skillSrc, path.join(dir, "SKILL.md"));
     out.push(dir);
