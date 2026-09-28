@@ -162,13 +162,13 @@ const detailOf = (err: unknown): string => {
 
 /** Actionable hint per error kind (§1.5); bad_request's depends on the snippet.
  *  Provider-generic — the slim PR-1 cut has a single provider and no registry, so
- *  hints name only what exists upstream (TYPESAFE_API_KEY, `jgrep init`, flags). */
+ *  hints name only what exists upstream (TYPESAFE_API_KEY / OPENROUTER_API_KEY, `jgrep init`, flags). */
 function hintFor(kind: JevErrorKind, snippet: string): string | undefined {
   switch (kind) {
     case "insufficient_credits":
       return "top up credits or check your plan with the provider";
     case "invalid_api_key":
-      return "check TYPESAFE_API_KEY or run `jgrep init`";
+      return "check TYPESAFE_API_KEY or OPENROUTER_API_KEY, or run `jgrep init`";
     case "model_unavailable":
       return "the provider does not serve this model — check the provider's model list or status page";
     case "bad_request":
@@ -199,7 +199,7 @@ function transportHint(kind: JevErrorKind, err: unknown): string {
 function statusMessage(kind: JevErrorKind, status: number, snippet: string): string {
   const base = snippet ? `the provider ${status}: ${snippet}` : `the provider ${status}`;
   // The env var belongs in the message itself — it is the first thing to check on 401/403.
-  return kind === "invalid_api_key" ? `${base} — is TYPESAFE_API_KEY a valid key?` : base;
+  return kind === "invalid_api_key" ? `${base} — is TYPESAFE_API_KEY / OPENROUTER_API_KEY a valid key?` : base;
 }
 
 function malformedResponseError(snippet: string): JevProviderError {

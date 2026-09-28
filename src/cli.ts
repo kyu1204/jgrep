@@ -6,7 +6,7 @@ import { loadTests, selectTests } from "./tests";
 import { JevProviderError } from "./errors";
 
 const VERSION = "0.4.0";
-const USAGE = `jgrep ${VERSION} — semantic grep powered by Jev (TypeSafe)
+const USAGE = `jgrep ${VERSION} — semantic grep powered by Jev
 
 usage: jgrep init                       interactive setup (API key, agent skills)
        jgrep [options] "<description>" [path ...]
