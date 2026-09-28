@@ -121,7 +121,9 @@ would turn an outage or an expired secret into a passing check.
 
 #### GitHub Action
 
-The same gate as a one-liner, plus test selection (`mode: tests`):
+The same gate as a one-liner. For test selection use `mode: tests` instead
+(see [jgrep-action](https://github.com/kyu1204/jgrep-action)).
+
 
 ```yaml
 - uses: actions/checkout@v5
