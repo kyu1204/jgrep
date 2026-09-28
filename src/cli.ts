@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import fs from "node:fs";
-import { estimateLine, chunkPaths, diffChunks, gitDiff, jgrep, loadCache, saveCache, resolveProvider, type Hit, type Kind, type Estimate } from "./jgrep";
+import { estimateLine, estimateTokens, USD_PER_M_INPUT, chunkPaths, diffChunks, gitDiff, jgrep, loadCache, saveCache, resolveProvider, type Hit, type Kind, type Estimate } from "./jgrep";
 import { readRows, loadQuestions, scoreRows, flattenAnswers, toCsv } from "./rows";
 import { loadTests, selectTests } from "./tests";
 import { JevProviderError } from "./errors";
@@ -146,9 +146,10 @@ function printExamples(lines: { line: string; hint?: string }[]) {
 function providerFor(o: { estimate: boolean }): { apiKey: string; endpoint?: string; model?: string; estimate?: Estimate } {
   return o.estimate ? { apiKey: "", estimate: { requests: 0, chars: 0 } } : resolveProvider();
 }
-function reportEstimate(p: { estimate?: Estimate }): boolean {
+function reportEstimate(p: { estimate?: Estimate }, json = false): boolean {
   if (!p.estimate) return false;
   console.error(estimateLine(p.estimate));
+  if (json) { const tokens = estimateTokens(p.estimate); console.log(JSON.stringify({ requests: p.estimate.requests, tokens, usd: tokens * USD_PER_M_INPUT / 1e6, estimate: true })); }
   process.exitCode = 0;
   return true;
 }
@@ -173,7 +174,7 @@ async function main() {
       ratePerSec: o.rate || undefined, failFast: o.failFast,
       onProgress: (d, n) => { if (process.stderr.isTTY) process.stderr.write(`\r${d}/${n} requests`); },
     });
-    if (reportEstimate(prov)) return;
+    if (reportEstimate(prov, o.json)) return;
     if (process.stderr.isTTY) process.stderr.write("\r\x1b[K");
 
     const rows: Hit[] = o.all ? [...r.all].sort((a, b) => b.p - a.p) : r.hits;
@@ -220,7 +221,7 @@ async function testsMain(o: ReturnType<typeof parse>) {
       ratePerSec: o.rate || undefined, failFast: o.failFast,
       onProgress: (d, n) => { if (process.stderr.isTTY) process.stderr.write(`\r${d}/${n} requests`); },
     });
-    if (reportEstimate(prov)) return;
+    if (reportEstimate(prov, o.json)) return;
     if (process.stderr.isTTY) process.stderr.write("\r\x1b[K");
     const rows = o.all ? [...r.all].sort((a, b) => b.p - a.p) : r.selected;
     if (o.json) console.log(JSON.stringify(rows, null, 2));
@@ -253,7 +254,7 @@ async function rowsMain(o: ReturnType<typeof parse>) {
       ratePerSec: o.rate || undefined, failFast: o.failFast,
       onProgress: (d, n) => { if (process.stderr.isTTY) process.stderr.write(`\r${d}/${n} requests`); },
     });
-    if (reportEstimate(prov)) return;
+    if (reportEstimate(prov, o.json)) return;
     if (process.stderr.isTTY) process.stderr.write("\r\x1b[K");
 
     const flat = flattenAnswers(r); // dense: errored rows are null, never holes

@@ -149,7 +149,7 @@ test("costOf prefers provider-reported cost and falls back to list price", async
 });
 
 test("--estimate counts the built requests, never fetches, needs no key", async () => {
-  const { estimateLine } = await import("./jgrep");
+  const { estimateLine, estimateTokens } = await import("./jgrep");
   const chunks = [1, 2, 3].map((i) => ({ file: "a.ts", start: i, end: i, text: `line ${i}`.repeat(20) }));
   const est = { requests: 0, chars: 0 };
   let fetched = 0;
@@ -161,6 +161,23 @@ test("--estimate counts the built requests, never fetches, needs no key", async 
   expect(r.errors).toEqual([]);
   expect(est.requests).toBe(2);
   expect(est.chars).toBe(JSON.stringify(buildRequest("q", chunks.slice(0, 2))).length + JSON.stringify(buildRequest("q", chunks.slice(2))).length);
-  expect(estimateLine(est)).toContain(`~${Math.ceil(est.chars / 4)} input tokens`);
+  expect(estimateLine(est)).toContain(`~${estimateTokens(est)} input tokens`);
   expect(parse(["--estimate", "q"]).estimate).toBe(true);
+});
+
+test("estimateTokens is within 15% of provider-billed tokens (live measurement 2026-09-28)", async () => {
+  const { estimateTokens } = await import("./jgrep");
+  // [request body chars, real input_tokens] from 4 live requests, plus reviewer's --diff / --rows samples
+  for (const [chars, real] of [[673, 438], [1626, 728], [8491, 2759], [38538, 11805], [480, 396], [500, 389]]) {
+    const est = estimateTokens({ requests: 1, chars });
+    expect(Math.abs(est - real) / real).toBeLessThan(0.15);
+  }
+});
+
+test("--estimate --json prints the estimate object on stdout", () => {
+  const r = Bun.spawnSync(["bun", "src/cli.ts", "--estimate", "--json", "retry", "src/cli.ts"]);
+  const j = JSON.parse(r.stdout.toString());
+  expect(j.estimate).toBe(true);
+  expect(j.requests).toBeGreaterThan(0);
+  expect(j.tokens).toBeGreaterThan(0);
 });
