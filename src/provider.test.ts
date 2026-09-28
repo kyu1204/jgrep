@@ -73,6 +73,11 @@ test("resolveProvider: JGREP_ENDPOINT rejects plain http:// to a non-loopback ho
     .toMatchObject({ error: expect.stringContaining("https://") });
 });
 
+test("resolveProvider: loopback http:// stubs are allowed, IPv4 and IPv6", () => {
+  for (const url of ["http://127.0.0.1:8765", "http://localhost:8765", "http://[::1]:8765"])
+    expect(runResolveProvider({ TYPESAFE_API_KEY: "ts-key", JGREP_ENDPOINT: url })).toMatchObject({ endpoint: url });
+});
+
 test("resolveProvider: no key -> error mentioning both variables", () => {
   const r = runResolveProvider({}) as { error: string };
   expect(r.error).toMatch(/TYPESAFE_API_KEY/);

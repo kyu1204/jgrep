@@ -310,7 +310,7 @@ export interface Provider { apiKey: string; endpoint: string; model: string }
  *  cleartext remote endpoint (e.g. one read from a project's own untrusted ./.env). */
 function checkEndpoint(url: string): string {
   const u = new URL(url);
-  if (u.protocol === "http:" && !["localhost", "127.0.0.1", "::1"].includes(u.hostname))
+  if (u.protocol === "http:" && !["localhost", "127.0.0.1", "[::1]"].includes(u.hostname))
     throw new Error(`JGREP_ENDPOINT must be https:// (or a loopback http:// stub): ${url}`);
   return url;
 }
