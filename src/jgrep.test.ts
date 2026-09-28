@@ -123,6 +123,30 @@ test("installSkills replaces dangling and live symlinks with a real dir without 
   expect(fs.readFileSync(path.join(repo, "SKILL.md"), "utf8")).toBe("old");
 });
 
+test("installSkills stops instead of copying through a symlink it could not remove", async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const { installSkills } = await import("./jgrep");
+  if (process.getuid?.() === 0) return; // root ignores the read-only dir
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "jgrep-"));
+  const src = path.join(home, "SKILL.md");
+  fs.writeFileSync(src, "new");
+  const repo = path.join(home, "repo-skill");
+  fs.mkdirSync(repo);
+  fs.writeFileSync(path.join(repo, "SKILL.md"), "old");
+  const skills = path.join(home, ".claude", "skills");
+  fs.mkdirSync(skills, { recursive: true });
+  fs.symlinkSync(repo, path.join(skills, "jgrep"));
+  fs.chmodSync(skills, 0o555);
+  try {
+    expect(() => installSkills(src, home, ["claude"])).toThrow();
+  } finally {
+    fs.chmodSync(skills, 0o755);
+  }
+  expect(fs.readFileSync(path.join(repo, "SKILL.md"), "utf8")).toBe("old");
+});
+
 test("rows: csv parser handles quotes, commas and newlines inside quotes", async () => {
   const { parseCsv } = await import("./rows");
   const r = parseCsv('handle,bio\n@a,"skincare, daily ""GRWM""\nSeoul"\n@b,makeup\n');
