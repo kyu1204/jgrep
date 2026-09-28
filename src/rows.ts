@@ -9,6 +9,7 @@ import { isFatalError, JevProviderError, type JevErrorKind } from "./errors";
 import {
   DEFAULT_MAX_RETRIES, DEFAULT_REQUEST_TIMEOUT_SEC, DEFAULT_TIMEOUT_SEC, KEY_WORKED_EARLIER_HINT,
   MODEL, costOf, type Cache, type Fetch,
+  type Estimate,
 } from "./jgrep";
 
 export type Row = Record<string, string>;
@@ -87,6 +88,7 @@ export interface RowsOptions {
   maxRetries?: number;         // failed attempts tolerated before the final error
   ratePerSec?: number;         // token-bucket pacing across all requests; 0/undefined = unlimited
   failFast?: boolean;          // rethrow the first fatal error instead of isolating it
+  estimate?: Estimate;         // dry run: count requests/chars into this sink, never call the provider
   fetchImpl?: Fetch; cache?: Cache; onProgress?: (done: number, total: number) => void;
 }
 
@@ -126,7 +128,9 @@ export async function scoreRows(rows: Row[], questions: Questions, o: RowsOption
   // throws the pool result away.
   let hadSuccess = false;
   const worker = async (b: number[], index: number): Promise<PackOutcome> => {
-    const res = await postSystemOne(buildRowsRequest(b.map((i) => rows[i]), questions, o.model), o.apiKey, {
+    const req = buildRowsRequest(b.map((i) => rows[i]), questions, o.model);
+    if (o.estimate) { o.estimate.requests++; o.estimate.chars += JSON.stringify(req).length; return { index, rowResults: [] }; }
+    const res = await postSystemOne(req, o.apiKey, {
       ...post,
       endpoint: o.endpoint,
       deadlineMs: Date.now() + timeoutMs, // per-batch deadline, retries included

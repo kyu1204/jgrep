@@ -147,3 +147,20 @@ test("costOf prefers provider-reported cost and falls back to list price", async
   expect(costOf({ input_tokens: 1_000_000 })).toBeCloseTo(0.042, 10);
   expect(costOf(undefined)).toBe(0);
 });
+
+test("--estimate counts the built requests, never fetches, needs no key", async () => {
+  const { estimateLine } = await import("./jgrep");
+  const chunks = [1, 2, 3].map((i) => ({ file: "a.ts", start: i, end: i, text: `line ${i}`.repeat(20) }));
+  const est = { requests: 0, chars: 0 };
+  let fetched = 0;
+  const r = await jgrep("q", chunks, {
+    threshold: 0.7, batch: 2, concurrency: 2, apiKey: "", estimate: est,
+    fetchImpl: (async () => { fetched++; return new Response("{}"); }) as unknown as typeof fetch,
+  });
+  expect(fetched).toBe(0);
+  expect(r.errors).toEqual([]);
+  expect(est.requests).toBe(2);
+  expect(est.chars).toBe(JSON.stringify(buildRequest("q", chunks.slice(0, 2))).length + JSON.stringify(buildRequest("q", chunks.slice(2))).length);
+  expect(estimateLine(est)).toContain(`~${Math.ceil(est.chars / 4)} input tokens`);
+  expect(parse(["--estimate", "q"]).estimate).toBe(true);
+});

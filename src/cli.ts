@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import fs from "node:fs";
-import { chunkPaths, diffChunks, gitDiff, jgrep, loadCache, saveCache, resolveProvider, type Hit, type Kind } from "./jgrep";
+import { estimateLine, chunkPaths, diffChunks, gitDiff, jgrep, loadCache, saveCache, resolveProvider, type Hit, type Kind, type Estimate } from "./jgrep";
 import { readRows, loadQuestions, scoreRows, flattenAnswers, toCsv } from "./rows";
 import { loadTests, selectTests } from "./tests";
 import { JevProviderError } from "./errors";
@@ -36,6 +36,8 @@ usage: jgrep init                       interactive setup (API key, agent skills
       --retries <n>     failed attempts tolerated per batch (default 4)
       --rate <req/s>    global request pacing (token bucket); 0 = unlimited
       --fail-fast       abort on the first fatal error instead of isolating it
+      --estimate        print requests, input tokens and cost a run would need, then
+                        exit 0 without calling the API (no key needed)
       --no-cache        ignore and do not write ~/.cache/jgrep
   -v, --version         print version
 
@@ -57,7 +59,7 @@ export function parse(argv: string[]) {
   const o = {
     threshold: 0.7, batch: 16, concurrency: 16, all: false, show: false, json: false, cache: true,
     diff: null as string[] | null, rows: "", questions: "", out: "", tests: false,
-    timeout: 15, requestTimeout: 30, retries: 4, rate: 0, failFast: false,
+    timeout: 15, requestTimeout: 30, retries: 4, rate: 0, failFast: false, estimate: false,
   };
   const rest: string[] = [];
   const positionalsAfter = (i: number) => argv.slice(i + 1).filter((x) => !x.startsWith("-")).length;
@@ -74,6 +76,7 @@ export function parse(argv: string[]) {
     else if (a === "--retries") o.retries = Number(argv[++i]);
     else if (a === "--rate") o.rate = Number(argv[++i]);
     else if (a === "--fail-fast") o.failFast = true;
+    else if (a === "--estimate") o.estimate = true;
     else if (a === "--no-cache") o.cache = false;
     else if (a === "--staged") (o.diff ??= []).push("--staged");
     else if (a === "--rows") o.rows = argv[++i] ?? "";
@@ -139,6 +142,17 @@ function printExamples(lines: { line: string; hint?: string }[]) {
   if (lines.length > 5) console.error(c("31", `  … and ${lines.length - 5} more`));
 }
 
+/** Dry run: an `estimate` sink instead of a key; every mode fills it via its request builder. */
+function providerFor(o: { estimate: boolean }): { apiKey: string; endpoint?: string; model?: string; estimate?: Estimate } {
+  return o.estimate ? { apiKey: "", estimate: { requests: 0, chars: 0 } } : resolveProvider();
+}
+function reportEstimate(p: { estimate?: Estimate }): boolean {
+  if (!p.estimate) return false;
+  console.error(estimateLine(p.estimate));
+  process.exitCode = 0;
+  return true;
+}
+
 async function main() {
   if (process.argv[2] === "init") { const { init } = await import("./init"); return init(); }
   const o = parse(process.argv.slice(2));
@@ -151,13 +165,15 @@ async function main() {
   const chunks = o.diff ? diffChunks(gitDiff(o.diff)) : chunkPaths(o.paths.length ? o.paths : ["."]);
   if (!chunks.length) { console.error(o.diff ? "empty diff" : "no text files found"); process.exit(1); }
   const cache = o.cache ? loadCache() : {};
+  const prov = providerFor(o);
   try {
     const r = await jgrep(o.question, chunks, {
-      ...o, kind, ...resolveProvider(), cache,
+      ...o, kind, ...prov, cache,
       timeoutSec: o.timeout, requestTimeoutSec: o.requestTimeout, maxRetries: o.retries,
       ratePerSec: o.rate || undefined, failFast: o.failFast,
       onProgress: (d, n) => { if (process.stderr.isTTY) process.stderr.write(`\r${d}/${n} requests`); },
     });
+    if (reportEstimate(prov)) return;
     if (process.stderr.isTTY) process.stderr.write("\r\x1b[K");
 
     const rows: Hit[] = o.all ? [...r.all].sort((a, b) => b.p - a.p) : r.hits;
@@ -196,13 +212,15 @@ async function testsMain(o: ReturnType<typeof parse>) {
   if (!tests.length) { console.error("no test files found"); process.exit(1); }
   const threshold = o.threshold === 0.7 ? 0.5 : o.threshold; // recall matters more here
   const cache = o.cache ? loadCache() : {};
+  const prov = providerFor(o);
   try {
     const r = await selectTests(diff, tests, {
-      ...o, threshold, ...resolveProvider(), cache,
+      ...o, threshold, ...prov, cache,
       timeoutSec: o.timeout, requestTimeoutSec: o.requestTimeout, maxRetries: o.retries,
       ratePerSec: o.rate || undefined, failFast: o.failFast,
       onProgress: (d, n) => { if (process.stderr.isTTY) process.stderr.write(`\r${d}/${n} requests`); },
     });
+    if (reportEstimate(prov)) return;
     if (process.stderr.isTTY) process.stderr.write("\r\x1b[K");
     const rows = o.all ? [...r.all].sort((a, b) => b.p - a.p) : r.selected;
     if (o.json) console.log(JSON.stringify(rows, null, 2));
@@ -227,13 +245,15 @@ async function rowsMain(o: ReturnType<typeof parse>) {
   if (!rows.length) { console.error("no rows"); process.exit(1); }
   const questions = loadQuestions(o.questions || o.question);
   const cache = o.cache ? loadCache() : {};
+  const prov = providerFor(o);
   try {
     const r = await scoreRows(rows, questions, {
-      ...o, ...resolveProvider(), cache,
+      ...o, ...prov, cache,
       timeoutSec: o.timeout, requestTimeoutSec: o.requestTimeout, maxRetries: o.retries,
       ratePerSec: o.rate || undefined, failFast: o.failFast,
       onProgress: (d, n) => { if (process.stderr.isTTY) process.stderr.write(`\r${d}/${n} requests`); },
     });
+    if (reportEstimate(prov)) return;
     if (process.stderr.isTTY) process.stderr.write("\r\x1b[K");
 
     const flat = flattenAnswers(r); // dense: errored rows are null, never holes

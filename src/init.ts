@@ -57,7 +57,7 @@ export async function init() {
   let model: string | undefined;
   while (!apiKey) {
     const typed = guard(await p.password({
-      message: `Paste your TypeSafe or OpenRouter API key (${CONSOLE_URL})`,
+      message: "Paste a TypeSafe key (console.typesafe.ai) or an OpenRouter key (openrouter.ai/keys)",
       validate: (v) => (v?.trim() ? undefined : "The key is required: jgrep cannot run without it."),
     })).trim();
     const v = varNameFor(typed);

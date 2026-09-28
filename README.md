@@ -50,6 +50,10 @@ and optionally teaches Claude Code / Codex to use jgrep. Get a key at
 [console.typesafe.ai](https://console.typesafe.ai), or use an OpenRouter key
 ([openrouter.ai/keys](https://openrouter.ai/keys)); see [Other endpoints](#other-endpoints).
 
+New TypeSafe accounts may not get free credits right now; an OpenRouter key works the
+same ([Other endpoints](#other-endpoints)), and `jgrep --estimate ...` shows what a run
+would cost before spending anything.
+
 <details>
 <summary>Prefer not to run init?</summary>
 
@@ -216,6 +220,8 @@ jgrep [options] --tests [ref] [--staged] [path ...]
       --retries <n>     failed attempts tolerated per batch (default 4)
       --rate <req/s>    global request pacing (token bucket); 0 = unlimited
       --fail-fast       abort on the first fatal error instead of isolating it
+      --estimate        print requests, input tokens and cost a run would need, then
+                        exit 0 without calling the API (no key needed)
       --no-cache        ignore and do not write ~/.cache/jgrep
 ```
 

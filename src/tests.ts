@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 import {
   DEFAULT_MAX_RETRIES, DEFAULT_REQUEST_TIMEOUT_SEC, DEFAULT_TIMEOUT_SEC, KEY_WORKED_EARLIER_HINT,
   MODEL, costOf, listFiles, type Cache, type Fetch,
+  type Estimate,
 } from "./jgrep";
 import { postSystemOne, RateLimiter, type PostOpts } from "./providers";
 import { runPool, type PoolResult } from "./pool";
@@ -93,6 +94,7 @@ export interface SelectOptions {
   maxRetries?: number;         // failed attempts tolerated before the final error
   ratePerSec?: number;         // token-bucket pacing across all requests; 0/undefined = unlimited
   failFast?: boolean;          // rethrow the first fatal error instead of isolating it
+  estimate?: Estimate;         // dry run: count requests/chars into this sink, never call the provider
   fetchImpl?: Fetch; cache?: Cache; onProgress?: (done: number, total: number) => void;
 }
 
@@ -148,7 +150,9 @@ export async function selectTests(diff: string, tests: TestFile[], o: SelectOpti
     b.forEach((_, j) => {
       questions[`t${j}`] = { type: "noul", instructions: `Look only at the test file with id "t${j}". Given the diff, is this test plausibly affected by the change: it imports or exercises a changed module or function, or asserts behaviour the diff alters? Unrelated tests should be no.` };
     });
-    const res = await postSystemOne({ model: o.model ?? MODEL, state, questions }, o.apiKey, {
+    const req = { model: o.model ?? MODEL, state, questions };
+    if (o.estimate) { o.estimate.requests++; o.estimate.chars += JSON.stringify(req).length; return { index, entries: [], malformed: [] }; }
+    const res = await postSystemOne(req, o.apiKey, {
       ...post,
       endpoint: o.endpoint,
       deadlineMs: Date.now() + timeoutMs, // per-batch deadline, retries included
