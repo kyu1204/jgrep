@@ -87,7 +87,8 @@ reading them one by one.
 
 ## Requirements
 
-Installed globally as `jgrep`; the key lives in `~/.config/jgrep/env`. If it
-reports "No TypeSafe API key", tell the user rather than working around it.
+Installed globally as `jgrep`; the key (`TYPESAFE_API_KEY` or `OPENROUTER_API_KEY`)
+lives in `~/.config/jgrep/env`. If it reports "No API key", tell the user rather
+than working around it.
 Run it inside a project directory or pass the project path: it refuses to
 walk a non-git directory with more than 5000 files.
