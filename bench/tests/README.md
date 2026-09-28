@@ -207,11 +207,6 @@ modules (`sansio/app.py`, `core/*`), not the entry file.
   one-line typo fix in `src/requests/adapters.py` plus a matching one-line
   test fix; `test_requests.py` is the library's broad general test file, not
   stem-matched to `adapters.py`, and Jev scored it below threshold.
-- **requests `f8bec2f`** — missed `tests/test_lowlevel.py`,
-  `tests/test_testserver.py`. This commit is a lint-tooling migration
-  (ruff) touching many files with reformatting-only changes; neither
-  missed file stem-matches a changed source file, and Jev scored both
-  below threshold.
 - **zod `cc4cd4e`**, **`d6bc1e3`**, **`ad32d75`**, **`dd9c36f`** — missed
   `packages/zod/src/v4/classic/tests/assignability.test.ts`,
   `packages/zod/src/v4/classic/tests/to-json-schema.test.ts`,
@@ -225,7 +220,7 @@ modules (`sansio/app.py`, `core/*`), not the entry file.
 
 ## Notes
 
-- Total cost across all 60 runs: $0.1115, well under the $1 budget; no
+- Total cost across all 60 runs: $0.1112 ($0.1115 before the package-root rule), well under the $1 budget; no
   single commit run came close to the 300k-token cap (max observed was
   ~97k tokens, on zod).
 - "extra" counts are not false positives: a test can be legitimately

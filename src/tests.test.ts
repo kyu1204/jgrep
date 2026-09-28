@@ -107,6 +107,26 @@ test("packageMatches resolves relative root imports from the test's own director
   expect([...packageMatches(["packages/b/src/index.ts"], sub, read, has, "packages/a/")]).toEqual([]);
 });
 
+test("packageMatches: dynamic imports, re-exports, nested __init__.py and Windows test paths", async () => {
+  const { packageMatches, signature } = await import("./tests");
+  const files = new Set(["pkg/package.json", "pkg/src/index.ts", "src/pkg/__init__.py", "src/pkg/sub/__init__.py"]);
+  const has = (f: string) => files.has(f);
+  const read = () => '{"name":"zod"}';
+  const t = (file: string, text: string) => ({ file, signature: signature(file, text) });
+  const tests = [
+    t("pkg/t/dyn.test.ts", 'test("x", async () => {\n  const { z } = await import("zod");\n});'),
+    t("pkg/t/reexp.test.ts", 'export * from "zod";'),
+    t("pkg\\t\\win.test.ts", 'import { z } from "../src";'),
+    t("pkg/t/other.test.ts", 'const m = await import("lodash");'),
+    t("tests/test_sub.py", "from pkg.sub import thing"),
+    t("tests/test_root.py", "import pkg"),
+  ];
+  expect([...packageMatches(["pkg/src/index.ts"], tests, read, has, "")].sort()).toEqual(["pkg/t/dyn.test.ts", "pkg/t/reexp.test.ts", "pkg\\t\\win.test.ts"]);
+  expect([...packageMatches(["src/pkg/sub/__init__.py"], tests, read, has, "")]).toEqual(["tests/test_sub.py"]);
+  // importing pkg.sub runs pkg/__init__.py first, so a root change selects both
+  expect([...packageMatches(["src/pkg/__init__.py"], tests, read, has, "")].sort()).toEqual(["tests/test_root.py", "tests/test_sub.py"]);
+});
+
 test("packageMatches finds the repo root when run from a subdirectory", async () => {
   const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
   const { execFileSync } = await import("node:child_process");

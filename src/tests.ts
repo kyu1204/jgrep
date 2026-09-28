@@ -26,7 +26,7 @@ export function findTestFiles(files: string[]): string[] {
 
 /** Imports plus test/describe names: enough for Jev to know what the file exercises, ~5% of its tokens. */
 export function signature(file: string, text = fs.readFileSync(file, "utf8")): string {
-  const keep = /^\s*(}\s*from\s+["']|import |from .+ import |const .+ = require\(|require\(|use |using |package |describe\(|it\(|test\(|it\.each|test\.each|def test_|async def test_|func Test|fn test_|#\[test\]|@Test|class .*Test|context\(|scenario\(|feature\()/;
+  const keep = /^\s*(}\s*from\s+["']|export .+ from |.*\bimport\(\s*["']|import |from .+ import |const .+ = require\(|require\(|use |using |package |describe\(|it\(|test\(|it\.each|test\.each|def test_|async def test_|func Test|fn test_|#\[test\]|@Test|class .*Test|context\(|scenario\(|feature\()/;
   const lines = text.split("\n").filter((l) => keep.test(l)).map((l) => l.trim().slice(0, 160));
   return lines.slice(0, 60).join("\n");
 }
@@ -73,7 +73,7 @@ export function importMatches(changedFiles: string[], tests: TestFile[]): Set<st
   const changedStems = new Set(changedFiles.filter((f) => !TEST_FILE_RE.test(f) && !NOISE_RE.test(f)).map(stem));
   const out = new Set<string>();
   for (const t of tests) {
-    for (const m of t.signature.matchAll(/(?:from|require\(|import)\s*["']([^"']+)["']/g)) {
+    for (const m of t.signature.matchAll(/(?:from|require\(|import\(?)\s*["']([^"']+)["']/g)) {
       const target = m[1];
       if (target.startsWith(".") || target.startsWith("/") || target.includes("/src/")) {
         const base = target.split("/").pop()?.replace(/\.(js|ts|mjs|cjs|jsx|tsx|py|go|rb|rs)$/, "") ?? "";
@@ -109,8 +109,10 @@ export function packageMatches(changedFiles: string[], tests: TestFile[], read =
     if (TEST_FILE_RE.test(f) || NOISE_RE.test(f)) continue;
     const dirs = f.split("/").slice(0, -1);
     let name = "", entry = "";
-    if (/\.py$/.test(f)) { // topmost dir of the consecutive __init__.py chain is the package
-      for (let i = dirs.length; i > 0; i--) if (has([...dirs.slice(0, i), "__init__.py"].join("/"))) { name = dirs[i - 1]; entry = [...dirs.slice(0, i), "__init__.py"].join("/"); }
+    if (/\.py$/.test(f)) { // the consecutive __init__.py chain above f's dir gives the dotted name (pkg.sub)
+      let i = dirs.length;
+      while (i > 0 && has([...dirs.slice(0, i), "__init__.py"].join("/"))) i--;
+      if (i < dirs.length) { name = dirs.slice(i).join("."); entry = [...dirs, "__init__.py"].join("/"); }
     } else {
       for (let i = dirs.length; i >= 0 && !name; i--) {
         const pj = [...dirs.slice(0, i), "package.json"].join("/");
@@ -129,11 +131,11 @@ export function packageMatches(changedFiles: string[], tests: TestFile[], read =
     } else {
       // A relative spec counts only if, resolved from the test's own directory, it lands on the entry file or its directory.
       const entryNoExt = entry.replace(/\.\w+$/, ""), entryDir = path.posix.dirname(entry);
-      const named = new RegExp(`^${n}(/.*)?$`);
-      roots.push((t) => [...t.signature.matchAll(/(?:from|require\(|import)\s*["']([^"']+)["']/g)].some(([, spec]) => {
+      const named = new RegExp(`^${n}(/.*)?$`); // subpaths too: "zod" and "zod/v4" export the same v4/classic API
+      roots.push((t) => [...t.signature.matchAll(/(?:from|require\(|import\(?)\s*["']([^"']+)["']/g)].some(([, spec]) => {
         if (named.test(spec)) return true;
         if (!spec.startsWith(".")) return false;
-        const r = path.posix.join(path.posix.dirname(path.posix.join(prefix, t.file)), spec).replace(/\.\w+$/, "");
+        const r = path.posix.join(path.posix.dirname(path.posix.join(prefix, t.file.replace(/\\/g, "/"))), spec).replace(/\.\w+$/, "");
         return r === entryNoExt || r === entryDir || (r === "." && entryDir === ".");
       }));
     }
