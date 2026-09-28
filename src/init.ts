@@ -12,7 +12,6 @@ import {
 } from "./jgrep";
 
 export const REPO_URL = "https://github.com/kyu1204/jgrep";
-const CONSOLE_URL = "https://console.typesafe.ai";
 
 /** OpenRouter keys are prefixed `sk-or-`; everything else is treated as a TypeSafe key. */
 export const varNameFor = (key: string): "TYPESAFE_API_KEY" | "OPENROUTER_API_KEY" =>
