@@ -1,4 +1,6 @@
 import { test, expect } from "bun:test";
+import path from "node:path";
+import os from "node:os";
 import { findTestFiles, signature, directMatches, changedFilesOf, compactDiff, selectTests } from "./tests";
 
 test("findTestFiles matches common layouts across stacks", () => {
@@ -88,4 +90,41 @@ test("packageMatches selects root-importing tests when the public surface change
   expect([...packageMatches(["pkg/src/schemas.ts"], tests, read, has)]).toEqual([]);
   expect([...packageMatches(["src/flask/__init__.py"], tests, read, has)].sort()).toEqual(["tests/test_a.py", "tests/test_b.py"]);
   expect([...packageMatches(["src/flask/app.py"], tests, read, has)]).toEqual([]);
+});
+
+test("packageMatches resolves relative root imports from the test's own directory", async () => {
+  const { packageMatches } = await import("./tests");
+  const files = new Set(["packages/a/package.json", "packages/a/src/index.ts", "packages/b/package.json", "packages/b/src/index.ts"]);
+  const read = (f: string) => (f.includes("/a/") ? '{"name":"a"}' : '{"name":"b"}');
+  const has = (f: string) => files.has(f);
+  const t = (file: string, signature: string) => ({ file, signature });
+  const tests = [t("packages/a/test/x.test.ts", 'import { x } from "../src"'), t("packages/b/test/y.test.ts", 'import { y } from "../src"'),
+    t("packages/a/test/h/d.test.ts", 'import { x } from "../index"'), t("packages/a/test/z.test.ts", 'import { x } from "../src/index.js"')];
+  expect([...packageMatches(["packages/a/src/index.ts"], tests, read, has, "")].sort()).toEqual(["packages/a/test/x.test.ts", "packages/a/test/z.test.ts"]);
+  // run from packages/a: test paths are cwd-relative, changed path is repo-relative
+  const sub = [t("test/x.test.ts", 'import { x } from "../src"')];
+  expect([...packageMatches(["packages/a/src/index.ts"], sub, read, has, "packages/a/")]).toEqual(["test/x.test.ts"]);
+  expect([...packageMatches(["packages/b/src/index.ts"], sub, read, has, "packages/a/")]).toEqual([]);
+});
+
+test("packageMatches finds the repo root when run from a subdirectory", async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+  const { execFileSync } = await import("node:child_process");
+  const d = mkdtempSync(path.join(os.tmpdir(), "jgrep-f16-"));
+  mkdirSync(path.join(d, "packages/a/src"), { recursive: true });
+  writeFileSync(path.join(d, "packages/a/package.json"), '{"name":"a"}');
+  writeFileSync(path.join(d, "packages/a/src/index.ts"), "");
+  execFileSync("git", ["init", "-q"], { cwd: d });
+  const script = `import { packageMatches } from ${JSON.stringify(path.resolve(import.meta.dir, "tests.ts"))};
+    console.log([...packageMatches(["packages/a/src/index.ts"], [{ file: "test/x.test.ts", signature: 'import "../src"' }])].join());`;
+  expect(execFileSync("bun", ["-e", script], { cwd: path.join(d, "packages/a"), encoding: "utf8" }).trim()).toBe("test/x.test.ts");
+});
+
+test("python and multi-line JS imports are recognized", async () => {
+  const { packageMatches, signature } = await import("./tests");
+  const t = (file: string, signature: string) => ({ file, signature });
+  const has = (f: string) => f === "src/flask/__init__.py" || f === "src/flask/x.py";
+  const tests = [t("a", "from flask.json import x"), t("b", "import os, flask"), t("c", "import os")];
+  expect([...packageMatches(["src/flask/__init__.py"], tests, () => "", has, "")].sort()).toEqual(["a", "b"]);
+  expect(signature("x.ts", 'import {\n  a,\n} from "zod";\nconst q = 1;')).toContain('} from "zod";');
 });

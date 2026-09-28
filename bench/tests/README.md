@@ -26,7 +26,7 @@ For each picked commit C:
    repo root. Selected S = entries with `p >= 0.5` (jgrep's default
    threshold for `--tests`).
 4. recall = |G ∩ S| / |G|; code-only recall = |G ∩ {reason in direct,
-   import}| / |G| (recall achievable without asking Jev at all); jev-added
+   import, package}| / |G| (recall achievable without asking Jev at all); jev-added
    = ground-truth tests only Jev's scoring caught; extra = |S \ G|, tests
    jgrep selected that the commit's author didn't touch (not necessarily
    wrong, since a test can be affected without being edited).
@@ -150,7 +150,7 @@ Columns: `edited` = test files the commit's author changed (\|G\|), `tests` = al
 | f0198e6 | 1 | 40 | 2 | 1.00 | 1.00 | 0 | 1 | 6240 | $0.0003 | 0.65 |
 | bc7dd0f | 1 | 40 | 2 | 1.00 | 0.00 | 1 | 1 | 7046 | $0.0003 | 0.52 |
 | 4791422 | 1 | 40 | 2 | 1.00 | 1.00 | 0 | 1 | 5814 | $0.0002 | 0.54 |
-| f8bec2f | 3 | 40 | 11 | 1.00 | 0.00 | 3 | 8 | 6808 | $0.0003 | 0.54 |
+| f8bec2f | 3 | 40 | 11 | 1.00 | 1.00 | 0 | 8 | 6808 | $0.0003 | 0.54 |
 | 5b4b64c | 1 | 40 | 2 | 1.00 | 1.00 | 0 | 1 | 6056 | $0.0003 | 0.52 |
 
 ### Summary across repos
@@ -161,8 +161,8 @@ Columns: `edited` = test files the commit's author changed (\|G\|), `tests` = al
 | zod | 12 | 0.882 | 0.269 | 0.190 | $0.0368 | 0.66 |
 | fastify | 12 | 0.958 | 0.208 | 0.123 | $0.0341 | 0.67 |
 | flask | 12 | 0.875 | 0.350 | 0.110 | $0.0074 | 0.52 |
-| requests | 12 | 0.917 | 0.417 | 0.067 | $0.0035 | 0.51 |
-| **all** | 60 | 0.926 | 0.432 | 0.119 | $0.1112 | 0.59 |
+| requests | 12 | 0.917 | 0.500 | 0.067 | $0.0035 | 0.51 |
+| **all** | 60 | 0.926 | 0.449 | 0.119 | $0.1112 | 0.59 |
 
 ## Package-root rule (2026-09-28)
 
@@ -174,12 +174,12 @@ or `__init__.py`). Before/after on the same 60 commits:
 | | before | after |
 |---|---|---|
 | mean recall | 0.919 | 0.926 |
-| mean code-only recall | 0.432 | 0.432 |
+| mean code-only recall | 0.432 | 0.449 |
 | mean selection ratio | 0.116 | 0.119 |
 | total cost | $0.1115 | $0.1112 |
 
-The gain is requests `f8bec2f` (0.33 to 1.00, its diff touches
-`requests/__init__.py`). zod's mean moved 0.899 to 0.882 with no package hit on
+The gain is requests `f8bec2f` (recall 0.33 to 1.00, code-only 0.00 to 1.00: its diff touches
+`requests/__init__.py`, so all three tests are now selected in code, no Jev). On hono `f950277` the rule added 12 extra selections. zod's mean moved 0.899 to 0.882 with no package hit on
 that repo: the change is Jev's own variance between runs (same commits, same
 prompts). A wider variant that also counts modules the entry re-exports lifted
 recall to 0.946 (flask 0.875 to 1.000) but raised the selection ratio to 0.208

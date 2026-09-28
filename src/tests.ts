@@ -4,6 +4,7 @@
 // selected in code without asking.
 import fs from "node:fs";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   DEFAULT_MAX_RETRIES, DEFAULT_REQUEST_TIMEOUT_SEC, DEFAULT_TIMEOUT_SEC, KEY_WORKED_EARLIER_HINT,
@@ -25,7 +26,7 @@ export function findTestFiles(files: string[]): string[] {
 
 /** Imports plus test/describe names: enough for Jev to know what the file exercises, ~5% of its tokens. */
 export function signature(file: string, text = fs.readFileSync(file, "utf8")): string {
-  const keep = /^\s*(import |from .+ import |const .+ = require\(|require\(|use |using |package |describe\(|it\(|test\(|it\.each|test\.each|def test_|async def test_|func Test|fn test_|#\[test\]|@Test|class .*Test|context\(|scenario\(|feature\()/;
+  const keep = /^\s*(}\s*from\s+["']|import |from .+ import |const .+ = require\(|require\(|use |using |package |describe\(|it\(|test\(|it\.each|test\.each|def test_|async def test_|func Test|fn test_|#\[test\]|@Test|class .*Test|context\(|scenario\(|feature\()/;
   const lines = text.split("\n").filter((l) => keep.test(l)).map((l) => l.trim().slice(0, 160));
   return lines.slice(0, 60).join("\n");
 }
@@ -83,15 +84,27 @@ export function importMatches(changedFiles: string[], tests: TestFile[]): Set<st
   return out;
 }
 
-const rd = (f: string) => { try { return fs.readFileSync(f, "utf8"); } catch { return ""; } };
-const exists = (f: string) => { try { return fs.statSync(f).isFile(); } catch { return false; } };
+let top: { root: string; prefix: string } | undefined;
+/** Repo root (changed paths are relative to it) and cwd's offset inside it (test paths are relative to cwd). */
+function repoTop() {
+  if (!top) {
+    try {
+      const g = (a: string) => execFileSync("git", ["rev-parse", a], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+      top = { root: g("--show-toplevel"), prefix: g("--show-prefix") };
+    } catch { top = { root: process.cwd(), prefix: "" }; }
+  }
+  return top;
+}
+const rd = (f: string) => { try { return fs.readFileSync(path.join(repoTop().root, f), "utf8"); } catch { return ""; } };
+const exists = (f: string) => { try { return fs.statSync(path.join(repoTop().root, f)).isFile(); } catch { return false; } };
 
 /** Root-importing tests ("import zod", "../src", "import flask") selected in code when a changed file is part of
- *  that package's public surface: its entry file (src/index.*, __init__.py).
- *  Package name and entry come from package.json / the __init__.py tree, no network. */
-export function packageMatches(changedFiles: string[], tests: TestFile[], read = rd, has = exists): Set<string> {
+ *  that package's public surface: its entry file (src/index.*, index.*, __init__.py; package.json main/exports are ignored).
+ *  Package name and entry come from package.json / the __init__.py tree, no network. Paths are repo-root relative;
+ *  `prefix` is where the test paths' cwd sits inside the repo. */
+export function packageMatches(changedFiles: string[], tests: TestFile[], read = rd, has = exists, prefix = repoTop().prefix): Set<string> {
   const out = new Set<string>();
-  const roots: RegExp[] = [];
+  const roots: ((t: TestFile) => boolean)[] = [];
   for (const f of changedFiles) {
     if (TEST_FILE_RE.test(f) || NOISE_RE.test(f)) continue;
     const dirs = f.split("/").slice(0, -1);
@@ -110,11 +123,22 @@ export function packageMatches(changedFiles: string[], tests: TestFile[], read =
     if (!name || !entry) continue;
     if (f !== entry) continue; // ponytail: entry file only; counting its re-exports selects ~every test in small libs (flask 0.11 -> 0.39 ratio)
     const n = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    roots.push(entry.endsWith(".py")
-      ? new RegExp(`^\\s*(import\\s+${n}\\b|from\\s+${n}\\s+import)`, "m")
-      : new RegExp(`(?:from|require\\(|import)\\s*["'](?:${n}(?:/[^"']*)?|(?:\\.\\.?/)+(?:src(?:/index)?|index)(?:\\.\\w+)?|\\.\\.?)["']`));
+    if (entry.endsWith(".py")) {
+      const re = new RegExp(`^\\s*(import\\s+([\\w.]+\\s*,\\s*)*${n}\\b|from\\s+${n}(\\.\\w+)*\\s+import)`, "m");
+      roots.push((t) => re.test(t.signature));
+    } else {
+      // A relative spec counts only if, resolved from the test's own directory, it lands on the entry file or its directory.
+      const entryNoExt = entry.replace(/\.\w+$/, ""), entryDir = path.posix.dirname(entry);
+      const named = new RegExp(`^${n}(/.*)?$`);
+      roots.push((t) => [...t.signature.matchAll(/(?:from|require\(|import)\s*["']([^"']+)["']/g)].some(([, spec]) => {
+        if (named.test(spec)) return true;
+        if (!spec.startsWith(".")) return false;
+        const r = path.posix.join(path.posix.dirname(path.posix.join(prefix, t.file)), spec).replace(/\.\w+$/, "");
+        return r === entryNoExt || r === entryDir || (r === "." && entryDir === ".");
+      }));
+    }
   }
-  if (roots.length) for (const t of tests) if (roots.some((r) => r.test(t.signature))) out.add(t.file);
+  if (roots.length) for (const t of tests) if (roots.some((r) => r(t))) out.add(t.file);
   return out;
 }
 

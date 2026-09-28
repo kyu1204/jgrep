@@ -156,7 +156,7 @@ function attemptOne(wtDir: string, sha: string, repoName: string): AttemptResult
     const G = new Set(groundTruth);
     const inter = [...G].filter((g) => S.has(g));
     const recall = G.size ? inter.length / G.size : null;
-    const codeOnly = new Set(all.filter((s) => s.reason === "direct" || s.reason === "import").map((s) => s.file));
+    const codeOnly = new Set(all.filter((s) => s.reason === "direct" || s.reason === "import" || s.reason === "package").map((s) => s.file));
     const codeOnlyInter = [...G].filter((g) => codeOnly.has(g));
     const codeOnlyRecall = G.size ? codeOnlyInter.length / G.size : null;
     const jevAdded = inter.length - codeOnlyInter.length;

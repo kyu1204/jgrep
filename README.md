@@ -127,7 +127,7 @@ jgrep --tests --staged -a                         # every test file with its pro
 ```
 
 Three layers, cheapest first: tests named after a changed file (`foo.ts` → `foo.test.ts`)
-and tests that import a changed module (or the package root, when the package entry file changed) are selected in code; the rest are asked of Jev
+and tests that import a changed module (or the package root, when the package entry file (`src/index.*`, `index.*` or `__init__.py`) changed) are selected in code; the rest are asked of Jev
 with the compacted diff (source files only, changed lines only) and each test file's
 imports and test names, one Noul per file. Default threshold is 0.5 here because a
 missed test costs more than an extra one. Run the full suite afterwards; this is for the
