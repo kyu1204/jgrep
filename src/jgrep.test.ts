@@ -181,3 +181,35 @@ test("--estimate --json prints the estimate object on stdout", () => {
   expect(j.requests).toBeGreaterThan(0);
   expect(j.tokens).toBeGreaterThan(0);
 });
+
+test("--estimate --json prints the estimate object for --tests and --rows too", () => {
+  const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "jgrep-est-"));
+  const env = { PATH: process.env.PATH ?? "", HOME: home }; // no key, empty cache
+  try {
+    // own two-commit repo: CI checkouts are shallow, so this repo's HEAD~1 may not exist
+    const repo = path.join(home, "repo"), git = (...a: string[]) => Bun.spawnSync(["git", "-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd: repo });
+    fs.mkdirSync(path.join(repo, "src"), { recursive: true });
+    git("init", "-q");
+    fs.writeFileSync(path.join(repo, "src/a.ts"), "export const a = 1;\n");
+    fs.writeFileSync(path.join(repo, "src/other.test.ts"), 'test("x", () => {});\n');
+    git("add", "."); git("commit", "-qm", "one");
+    fs.writeFileSync(path.join(repo, "src/a.ts"), "export const a = 2;\n");
+    git("commit", "-qam", "two");
+    const t = Bun.spawnSync(["bun", path.resolve("src/cli.ts"), "--tests", "HEAD~1", "--estimate", "--json"], { env, cwd: repo });
+    expect(t.exitCode).toBe(0);
+    const jt = JSON.parse(t.stdout.toString());
+    expect(jt.estimate).toBe(true);
+    expect(typeof jt.requests).toBe("number");
+    const csv = path.join(home, "rows.csv");
+    fs.writeFileSync(csv, "handle,bio\n@a,skincare\n@b,cars\n");
+    const r = Bun.spawnSync(["bun", "src/cli.ts", "--rows", csv, "--estimate", "--json", "beauty content"], { env });
+    expect(r.exitCode).toBe(0);
+    const jr = JSON.parse(r.stdout.toString());
+    expect(jr.estimate).toBe(true);
+    expect(jr.requests).toBeGreaterThan(0);
+    expect(jr.tokens).toBeGreaterThan(0);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
