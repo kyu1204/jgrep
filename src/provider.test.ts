@@ -68,6 +68,15 @@ test("resolveProvider: JGREP_ENDPOINT overrides the URL only, keeping the key's 
     .toEqual({ apiKey: "sk-or-key", endpoint: stub, model: OPENROUTER_MODEL });
 });
 
+test("resolveProvider: JGREP_MODEL overrides the model id; a loopback endpoint needs no key", () => {
+  expect(runResolveProvider({ TYPESAFE_API_KEY: "ts-key", JGREP_MODEL: "nimble" }))
+    .toEqual({ apiKey: "ts-key", endpoint: ENDPOINT, model: "nimble" });
+  expect(runResolveProvider({ JGREP_ENDPOINT: "http://127.0.0.1:11434/v1/systemone", JGREP_MODEL: "nimble" }))
+    .toEqual({ apiKey: "", endpoint: "http://127.0.0.1:11434/v1/systemone", model: "nimble" });
+  expect(runResolveProvider({ JGREP_ENDPOINT: "https://example.com/v1/systemone", JGREP_MODEL: "nimble" }))
+    .toMatchObject({ error: expect.stringContaining("No API key") });
+});
+
 test("resolveProvider: JGREP_ENDPOINT rejects plain http:// to a non-loopback host", () => {
   expect(runResolveProvider({ TYPESAFE_API_KEY: "ts-key", JGREP_ENDPOINT: "http://example.com" }))
     .toMatchObject({ error: expect.stringContaining("https://") });
@@ -148,3 +157,38 @@ test("headersFor: OpenRouter endpoints get attribution headers, others none", as
     expect(Object.keys(n).sort()).toEqual(["Authorization", "Content-Type"]);
   }
 });
+
+test("e2e: a loopback JGREP_ENDPOINT with JGREP_MODEL runs with no key at all (local System One servers)", async () => {
+  const requests: { auth: string | null; model: unknown }[] = [];
+  const server = Bun.serve({
+    port: 0,
+    fetch: async (req: Request) => {
+      const body = await req.json() as { model: unknown };
+      requests.push({ auth: req.headers.get("authorization"), model: body.model });
+      return Response.json({ answers: Object.fromEntries(Object.keys((body as any).questions ?? {}).map((k) => [k, { type: "noul", noul: 0.9 }])) });
+    },
+  });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "jgrep-local-"));
+  const home = path.join(dir, "home");
+  fs.mkdirSync(home, { recursive: true });
+  try {
+    fs.writeFileSync(path.join(dir, "probe.ts"), "const answer = 42;\n".repeat(6));
+    const child = Bun.spawn(["bun", cliPath, "--no-cache", "some description", "probe.ts"], {
+      cwd: dir,
+      env: {
+        ...process.env, JGREP_NO_MAIN: "", HOME: home,
+        TYPESAFE_API_KEY: "", OPENROUTER_API_KEY: "",
+        JGREP_ENDPOINT: `http://127.0.0.1:${server.port}/v1/systemone`, JGREP_MODEL: "nimble",
+      },
+      stdout: "pipe", stderr: "pipe",
+    });
+    const [code, stderr] = await Promise.all([child.exited, Bun.readableStreamToText(child.stderr)]);
+    expect(stderr).not.toMatch(/error|No API key/i);
+    expect(code).toBe(0);
+    expect(requests.length).toBeGreaterThan(0);
+    for (const r of requests) expect(r.model).toBe("nimble");
+  } finally {
+    server.stop();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}, 10_000);

@@ -333,15 +333,18 @@ function checkEndpoint(url: string): string {
 }
 
 /** Endpoint + wire model id picked from whichever key is present (TYPESAFE_API_KEY wins
- *  when both are set); JGREP_ENDPOINT overrides the URL only, keeping the key's model.
- *  See issue #7. */
+ *  when both are set); JGREP_ENDPOINT overrides the URL, JGREP_MODEL the model id (any
+ *  System One server, e.g. Ollama's local /v1/systemone). A loopback JGREP_ENDPOINT
+ *  needs no key at all. See issue #7. */
 export function resolveProvider(env = process.env): Provider {
   const rawOverride = readVar("JGREP_ENDPOINT", env);
   const override = rawOverride === undefined ? undefined : checkEndpoint(rawOverride);
+  const model = readVar("JGREP_MODEL", env);
   const typesafe = readVar("TYPESAFE_API_KEY", env);
-  if (typesafe) return { apiKey: typesafe, endpoint: override ?? ENDPOINT, model: MODEL };
+  if (typesafe) return { apiKey: typesafe, endpoint: override ?? ENDPOINT, model: model ?? MODEL };
   const openrouter = readVar("OPENROUTER_API_KEY", env);
-  if (openrouter) return { apiKey: openrouter, endpoint: override ?? OPENROUTER_ENDPOINT, model: OPENROUTER_MODEL };
+  if (openrouter) return { apiKey: openrouter, endpoint: override ?? OPENROUTER_ENDPOINT, model: model ?? OPENROUTER_MODEL };
+  if (override && new URL(override).protocol === "http:") return { apiKey: "", endpoint: override, model: model ?? MODEL };
   throw new Error("No API key. Run `jgrep init` (or export TYPESAFE_API_KEY or OPENROUTER_API_KEY).");
 }
 

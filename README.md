@@ -96,6 +96,17 @@ export TYPESAFE_API_KEY=test-key JGREP_ENDPOINT=http://127.0.0.1:8765
 jgrep "reads a CSV file" src/
 ```
 
+`JGREP_MODEL` overrides the model id, so any server that speaks the System One
+protocol works, including local ones. A loopback `JGREP_ENDPOINT` needs no key:
+
+```bash
+export JGREP_ENDPOINT=http://127.0.0.1:11434/v1/systemone JGREP_MODEL=nimble   # e.g. Ollama
+jgrep --tests HEAD~1
+```
+
+Answers are cached per model id, so switching models never reuses another
+model's answers.
+
 ## Use
 
 ### Find code by behavior
