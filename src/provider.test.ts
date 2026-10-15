@@ -192,3 +192,52 @@ test("e2e: a loopback JGREP_ENDPOINT with JGREP_MODEL runs with no key at all (l
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }, 10_000);
+
+test("cache: a JGREP_MODEL override never reuses the default alias's answers; the alias is shared across providers", async () => {
+  const { cacheModel } = await import("./jgrep");
+  expect(cacheModel(undefined)).toBe(MODEL);
+  expect(cacheModel(OPENROUTER_MODEL)).toBe(MODEL);
+  expect(cacheModel("jev-1.14.0")).toBe("jev-1.14.0");
+
+  let sent = 0;
+  const server = Bun.serve({
+    port: 0,
+    fetch: async (req: Request) => {
+      const body = await req.json() as { model: string; questions: Record<string, unknown> };
+      sent++;
+      const p = body.model === "jev-1.14.0" ? 0.2 : 0.9;
+      return Response.json({ model: body.model, answers: Object.fromEntries(Object.keys(body.questions).map((k) => [k, { type: "noul", noul: p }])) });
+    },
+  });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "jgrep-cachekey-"));
+  const home = path.join(dir, "home"); // isolated ~/.cache/jgrep
+  fs.mkdirSync(home, { recursive: true });
+  const run = async (model?: string) => {
+    const before = sent;
+    const child = Bun.spawn(["bun", cliPath, "--json", "-a", "-t", "0", "some description", "probe.ts"], {
+      cwd: dir,
+      env: {
+        ...process.env, JGREP_NO_MAIN: "", HOME: home, TYPESAFE_API_KEY: "", OPENROUTER_API_KEY: "",
+        JGREP_ENDPOINT: `http://127.0.0.1:${server.port}/v1/systemone`, JGREP_MODEL: model ?? "",
+      },
+      stdout: "pipe", stderr: "pipe",
+    });
+    const [out] = await Promise.all([Bun.readableStreamToText(child.stdout), child.exited]);
+    return { sent: sent - before, ps: (JSON.parse(out) as { p: number }[]).map((h) => h.p) };
+  };
+  try {
+    fs.writeFileSync(path.join(dir, "probe.ts"), "const answer = 42;\n".repeat(6));
+    const first = await run();
+    expect(first.sent).toBeGreaterThan(0);
+    expect(first.ps.every((p) => p === 0.9)).toBe(true);
+    const pinned = await run("jev-1.14.0"); // must ask the pinned model, not reuse the alias's answers
+    expect(pinned.sent).toBeGreaterThan(0);
+    expect(pinned.ps.every((p) => p === 0.2)).toBe(true);
+    const again = await run(); // the alias's own entries are still cached
+    expect(again.sent).toBe(0);
+    expect(again.ps.every((p) => p === 0.9)).toBe(true);
+  } finally {
+    server.stop();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}, 15_000);

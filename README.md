@@ -104,7 +104,9 @@ jgrep --tests HEAD~1
 ```
 
 Answers are cached per model id, so switching models never reuses another
-model's answers.
+model's answers. `jev-latest` is an alias TypeSafe moves to each new release, and
+cached answers stay with the alias: delete `~/.cache/jgrep` after a move, or pin a
+version with `JGREP_MODEL=jev-1.14.0` (on OpenRouter, `typesafe/jev-1.14`).
 
 ## Use
 
