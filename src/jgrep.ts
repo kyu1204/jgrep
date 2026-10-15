@@ -166,7 +166,10 @@ export function saveCache(c: Cache) {
     fs.writeFileSync(CACHE_FILE, JSON.stringify(c));
   } catch { /* cache is best-effort */ }
 }
-const key = (q: string, kind: Kind, c: Chunk) => createHash("sha1").update(`${MODEL}\0${kind}\0${q}\0${c.text}`).digest("hex");
+/** Cache namespace: the default alias shares answers across TypeSafe and OpenRouter; a JGREP_MODEL
+ *  override (a pinned version, a local model) gets its own, so switching models never reuses answers. */
+export const cacheModel = (m?: string) => (!m || m === OPENROUTER_MODEL ? MODEL : m);
+const key = (m: string, q: string, kind: Kind, c: Chunk) => createHash("sha1").update(`${m}\0${kind}\0${q}\0${c.text}`).digest("hex");
 
 // ---- core -------------------------------------------------------------------
 // Retry/deadline defaults live in ONE place (here); jgrep()/scoreRows() resolve
@@ -203,12 +206,13 @@ export const KEY_WORKED_EARLIER_HINT = "the key worked earlier this run — it m
 
 export async function jgrep(question: string, chunks: Chunk[], o: Options): Promise<Result> {
   const kind = o.kind ?? "code";
+  const cm = cacheModel(o.model);
   const cache = o.cache ?? {};
   const f = o.fetchImpl ?? fetch;
   const all: (Hit | undefined)[] = new Array(chunks.length); // errored chunks stay unset
   const todo: number[] = [];
   chunks.forEach((c, i) => {
-    const hit = cache[key(question, kind, c)];
+    const hit = cache[key(cm, question, kind, c)];
     if (hit !== undefined) all[i] = { ...c, p: hit }; else todo.push(i);
   });
   const cached = chunks.length - todo.length;
@@ -248,7 +252,7 @@ export async function jgrep(question: string, chunks: Chunk[], o: Options): Prom
     b.forEach((ci, j) => {
       const p = res.answers[`c${j}`]?.noul;
       if (Number.isFinite(p)) {
-        cache[key(question, kind, chunks[ci])] = p;
+        cache[key(cm, question, kind, chunks[ci])] = p;
         entries.push({ chunkIndex: ci, p });
       } else malformed.push(ci);
     });

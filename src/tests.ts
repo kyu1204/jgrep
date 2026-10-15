@@ -8,7 +8,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   DEFAULT_MAX_RETRIES, DEFAULT_REQUEST_TIMEOUT_SEC, DEFAULT_TIMEOUT_SEC, KEY_WORKED_EARLIER_HINT,
-  MODEL, costOf, listFiles, type Cache, type Fetch,
+  MODEL, cacheModel, costOf, listFiles, type Cache, type Fetch,
   type Estimate,
 } from "./jgrep";
 import { postSystemOne, RateLimiter, type PostOpts } from "./providers";
@@ -177,7 +177,7 @@ export async function selectTests(diff: string, tests: TestFile[], o: SelectOpti
   const viaImport = importMatches(changed, tests);
   const viaPackage = packageMatches(changed, tests);
   const diffHash = createHash("sha1").update(compact).digest("hex");
-  const key = (t: TestFile) => createHash("sha1").update(`${MODEL}\0tests\0${diffHash}\0${t.file}\0${t.signature}`).digest("hex");
+  const key = (t: TestFile) => createHash("sha1").update(`${cacheModel(o.model)}\0tests\0${diffHash}\0${t.file}\0${t.signature}`).digest("hex");
 
   const all: (Selected | undefined)[] = new Array(tests.length); // errored tests stay unset
   const todo: number[] = [];

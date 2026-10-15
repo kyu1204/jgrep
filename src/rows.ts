@@ -8,7 +8,7 @@ import { runPool, type PoolResult } from "./pool";
 import { isFatalError, JevProviderError, type JevErrorKind } from "./errors";
 import {
   DEFAULT_MAX_RETRIES, DEFAULT_REQUEST_TIMEOUT_SEC, DEFAULT_TIMEOUT_SEC, KEY_WORKED_EARLIER_HINT,
-  MODEL, costOf, type Cache, type Fetch,
+  MODEL, cacheModel, costOf, type Cache, type Fetch,
   type Estimate,
 } from "./jgrep";
 
@@ -78,7 +78,7 @@ export function buildRowsRequest(rows: Row[], questions: Questions, model: strin
   return { model, state, questions: qs };
 }
 
-const key = (qJson: string, r: Row) => createHash("sha1").update(`${MODEL}\0rows\0${qJson}\0${JSON.stringify(r)}`).digest("hex");
+const key = (m: string, qJson: string, r: Row) => createHash("sha1").update(`${m}\0rows\0${qJson}\0${JSON.stringify(r)}`).digest("hex");
 
 export interface RowsOptions {
   batch: number; concurrency: number; apiKey: string;
@@ -103,11 +103,12 @@ interface PackOutcome { index: number; rowResults: { row: number; answers: Recor
 
 export async function scoreRows(rows: Row[], questions: Questions, o: RowsOptions): Promise<RowsResult> {
   const qJson = JSON.stringify(questions);
+  const cm = cacheModel(o.model);
   const cache = o.cache ?? {};
   const f = o.fetchImpl ?? fetch;
   const answers: (Record<string, Answer> | null)[] = new Array(rows.length).fill(null); // errored rows stay null — dense, never holes
   const todo: number[] = [];
-  rows.forEach((r, i) => { const hit = cache[key(qJson, r)]; if (hit) answers[i] = hit; else todo.push(i); });
+  rows.forEach((r, i) => { const hit = cache[key(cm, qJson, r)]; if (hit) answers[i] = hit; else todo.push(i); });
   // Defensive normalization (same rule as jgrep()): a 0/fractional batch would spin
   // the loop forever (+= 0) or overlap packs. parse() rejects those; library callers
   // get floored and clamped at 1 instead.
@@ -142,7 +143,7 @@ export async function scoreRows(rows: Row[], questions: Questions, o: RowsOption
       for (const name of Object.keys(questions)) a[name] = res.answers[`r${j}.${name}`] ?? { type: "missing" };
       // Same rule as before: a row with any missing answer is not cached. Complete rows
       // go into the in-memory cache object now — cli.ts persists it in a finally.
-      if (Object.values(a).every((x) => x.type !== "missing")) cache[key(qJson, rows[ri])] = a;
+      if (Object.values(a).every((x) => x.type !== "missing")) cache[key(cm, qJson, rows[ri])] = a;
       return { row: ri, answers: a };
     });
     hadSuccess = true; // this pack's request succeeded — set before returning
