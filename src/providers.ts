@@ -496,7 +496,7 @@ export function loadProviders(env: Env = process.env, homeDir: string = os.homed
     if (mlx.enabled) for (const s of credList(mlx.api_key) as string[]) {
       const n = varName(s);
       if (!n) continue;
-      const clash = entries.find((e) => e.enabled && e.name !== "mlx" && [...credList(e.api_key), ...credList(e.account_id)].some((x) => varName(x) === n));
+      const clash = entries.find((e) => e.enabled && [...credList(e.api_key), ...credList(e.account_id)].some((x) => varName(x) === n)); // no e.name check: the append runs only when no file entry is mlx
       if (clash) throw configError(`${file}: $${n} is used by both "${clash.name}" and the appended mlx fallback; a key may belong to one provider only (name mlx in the file and disable it, or rename one)`);
     }
     entries.push(mlx);
