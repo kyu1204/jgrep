@@ -140,7 +140,7 @@ provider and keys (~/.jgrep/providers.json; `jgrep status` shows the chain)
       --model <id>      model id where it fits a provider's ids (env JEV_MODEL, JGREP_MODEL)
   providers.json: {"version":1,"providers":[{"name":"openrouter","api_key":
   "$OPENROUTER_API_KEY"},{"name":"typesafe"}]}: array order = fallback order; a
-  failure moves the request on unless bad_request/circuit_breaker_open/budget_exhausted,
+  failure moves the request on unless bad_request/circuit_breaker_open,
   logged to ~/.jgrep/errors.log (kept 72 h); api_key "$VAR" or a literal (chmod 600),
   else ~/.config/jgrep/{<name>.key,env}, ./.env; fields: providers.example.json
   "adapter": system-one/cloudflare-ai-run/vercel-evaluation
