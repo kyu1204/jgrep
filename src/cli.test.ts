@@ -313,6 +313,51 @@ test("cli main mlx: a failing hosted provider falls back to the local server and
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }, 20_000);
+
+test("cli main mlx: a spent budget falls back to the free local server (budget_exhausted on the hosted entry, mlx at $0 answers)", async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const reply = (chunks: { id: string }[]) => {
+    const a: Record<string, unknown> = {};
+    for (const c of chunks) a[c.id] = { type: "noul", noul: 0.9 };
+    return new Response(JSON.stringify({ answers: a, usage: { input_tokens: 10 } }), { status: 200 });
+  };
+  let hosted = 0, local = 0;
+  // The hosted provider answers 200 (so it is NOT dead — it would bill), but the budget is so
+  // small that the reservation on the hosted entry's price refuses before the request goes out.
+  // mlx (usd_per_mtok 0) reserves nothing, so it is reached and answers.
+  const hostedSrv = Bun.serve({ port: 0, fetch: async (req: Request) => { hosted++; const b = await req.json(); return reply(b.state?.chunks ?? []); } });
+  const localSrv = Bun.serve({ port: 0, fetch: async (req: Request) => { local++; const b = await req.json(); return reply(b.state?.chunks ?? []); } });
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "jgrep-budget-fb-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "jgrep-budget-fb-src-"));
+  try {
+    // A file with a hosted provider first and NO mlx entry: the structural append adds mlx last.
+    const pf = path.join(home, "providers.json");
+    fs.writeFileSync(pf, JSON.stringify({ version: 1, providers: [
+      { name: "compatible", base_url: `http://127.0.0.1:${hostedSrv.port}`, api_key: "x", usd_per_mtok: 1000000 }, // $1M/Mtok: one request far exceeds the $0.0001 budget
+    ] }));
+    fs.chmodSync(pf, 0o600);
+    fs.writeFileSync(path.join(dir, "a.ts"), "export function alpha() {\n  return 1;\n}\n");
+    // --budget 0.0001: the hosted entry (priced at the run default) cannot fit, budget_exhausted
+    // falls back to mlx (priced 0), which answers.
+    const p = await spawn(
+      ["bun", "src/cli.ts", "--no-cache", "--retries", "0", "--budget", "0.0001", "returns a number", dir],
+      { ...process.env, JGREP_NO_MAIN: "", JGREP_HOME: home, MLX_DECISION_URL: `http://127.0.0.1:${localSrv.port}` },
+    );
+    expect(p.exitCode).toBe(0); // the run survived: mlx answered at $0
+    expect(hosted).toBe(0); // the hosted provider was never reached — budget_exhausted was unsent
+    expect(local).toBeGreaterThan(0); // ...mlx answered
+    expect(p.stderr).toMatch(/fallback: compatible → mlx/);
+    expect(p.stderr).toContain("elephant-1");
+  } finally {
+    hostedSrv.stop(true);
+    localSrv.stop(true);
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}, 20_000);
+
 test("cli main rows: --json emits the position-aligned flattened array; --json-errors wraps it; --out follows the flag", async () => {
   const fs = await import("node:fs");
   const os = await import("node:os");
@@ -458,7 +503,7 @@ test("cli status: the chain in file order with each entry's state, never a key; 
   expect(p.stdout).toMatch(/^1\. first +key present \(not verified\) · key literal in providers\.json$/m); // no free check: never "ready"
   expect(p.stdout).toMatch(/^2\. typesafe +disabled$/m);
   expect(p.stdout).toMatch(/^3\. openrouter +key missing \(\$OPENROUTER_API_KEY\)$/m);
-  expect(p.stdout).not.toMatch(/^4\./m); // exactly the file's entries: no built-in appended
+  expect(p.stdout).toMatch(/^4\. mlx +not configured \(no base_url\)$/m); // the structural mlx fallback is appended (TRDD-3KBUODCE)
   expect(p.stdout + p.stderr).not.toContain("first-literal-key-123");
   const none = await spawn(["bun", "src/cli.ts", "status"], (await homeEnv([{ name: "openrouter" }])).env);
   expect(none.exitCode).toBe(2);

@@ -93,11 +93,11 @@ test("no providers.json: the built-in chain, openrouter first; an unset key is a
 
 // ---- the file is the chain -----------------------------------------------------------------
 
-test("the chain is EXACTLY the file's entries, in file order: a built-in the file does not name is never appended", () => {
+test("the chain is the file's entries in file order, plus the structural mlx fallback: a built-in the file does not name is never appended EXCEPT mlx (TRDD-3KBUODCE)", () => {
   const { env } = homeWith([{ name: "typesafe" }, { name: "openrouter" }]);
-  expect(names({ ...env, OPENROUTER_API_KEY: "o", TYPESAFE_API_KEY: "t", AI_GATEWAY_API_KEY: "v" })).toEqual(["typesafe:ready", "openrouter:ready"]);
+  expect(names({ ...env, OPENROUTER_API_KEY: "o", TYPESAFE_API_KEY: "t", AI_GATEWAY_API_KEY: "v" })).toEqual(["typesafe:ready", "openrouter:ready", "mlx:no-url"]);
   const { chain } = resolveChain({ env: { ...env, OPENROUTER_API_KEY: "o", TYPESAFE_API_KEY: "t" }, homeDir: tmp(), cwd: tmp(), version: "t" });
-  expect(chain.entries.map((e) => e.backend.name)).toEqual(["typesafe", "openrouter"]); // OPENROUTER_API_KEY no longer jumps the queue
+  expect(chain.entries.map((e) => e.backend.name)).toEqual(["typesafe", "openrouter"]); // mlx is appended but not ready (no-url), so not in the chain
 });
 
 test("api_key: $VAR, ${VAR}, an array (first set wins) and a literal key", () => {
@@ -108,15 +108,15 @@ test("api_key: $VAR, ${VAR}, an array (first set wins) and a literal key", () =>
     { name: "three", ...custom, api_key: "lit-key-3" },
   ]);
   const { providers } = loadProviders({ ...env, ONE_KEY: "k1", TWO_KEY: "k2" }, tmp(), tmp());
-  expect(providers.map((p) => [p.key, p.keySource])).toEqual([["k1", "$ONE_KEY"], ["k2", "$TWO_KEY"], ["lit-key-3", "literal in providers.json"]]);
+  expect(providers.map((p) => [p.key, p.keySource])).toEqual([["k1", "$ONE_KEY"], ["k2", "$TWO_KEY"], ["lit-key-3", "literal in providers.json"], ["", ""]]); // + the appended mlx fallback (no-url: no key lookup)
 });
 
 test("enabled: true/false and every synonym, any other value is an error naming the provider and the value", () => {
   for (const on of [true, 1, "true", "Enabled", "enable", "1", "YES", "y", "active", "on"]) {
-    expect(names({ ...homeWith([{ name: "typesafe", enabled: on }]).env, TYPESAFE_API_KEY: "t" })).toEqual(["typesafe:ready"]);
+    expect(names({ ...homeWith([{ name: "typesafe", enabled: on }]).env, TYPESAFE_API_KEY: "t" })).toEqual(["typesafe:ready", "mlx:no-url"]);
   }
   for (const off of [false, 0, "false", "DISABLED", "disable", "0", "no", "n", "inactive", "Off"]) {
-    expect(names({ ...homeWith([{ name: "typesafe", enabled: off }]).env, TYPESAFE_API_KEY: "t" })).toEqual(["typesafe:disabled"]);
+    expect(names({ ...homeWith([{ name: "typesafe", enabled: off }]).env, TYPESAFE_API_KEY: "t" })).toEqual(["typesafe:disabled", "mlx:no-url"]);
   }
   const e = errOf(() => names(homeWith([{ name: "typesafe", enabled: "maybe" }]).env));
   expect(e.message).toContain('"typesafe"');
@@ -306,6 +306,26 @@ test("mlx: MLX_DECISION_URL is its base URL (a full /v1/systemone works too); no
   expect([p.url, p.verify, p.state]).toEqual(["http://127.0.0.1:9001/v1/systemone", "http://127.0.0.1:9001/health", "ready"]);
 });
 
+test("structural mlx fallback (TRDD-3KBUODCE): a file that names no mlx entry gets it appended last", () => {
+  const { env } = homeWith([{ name: "typesafe" }]);
+  const { providers } = loadProviders({ ...env, TYPESAFE_API_KEY: "t" }, tmp(), tmp());
+  expect(providers.map((p) => p.name)).toEqual(["typesafe", "mlx"]);
+  expect(providers[1].state).toBe("no-url"); // no MLX_DECISION_URL: skipped, never an error
+});
+
+test("structural mlx fallback: a file that names mlx with enabled:false has NO mlx in the chain (the user opted out)", () => {
+  const { env } = homeWith([{ name: "typesafe" }, { name: "mlx", enabled: false }]);
+  const { providers } = loadProviders({ ...env, TYPESAFE_API_KEY: "t", MLX_DECISION_URL: "http://127.0.0.1:8123" }, tmp(), tmp());
+  expect(providers.map((p) => p.name)).toEqual(["typesafe", "mlx"]);
+  expect(providers[1].state).toBe("disabled"); // the file's own mlx entry, disabled — not appended, not ready
+});
+
+test("structural mlx fallback: a file that names mlx explicitly keeps the file's position (not appended)", () => {
+  const { env } = homeWith([{ name: "mlx" }, { name: "typesafe" }]);
+  const { providers } = loadProviders({ ...env, TYPESAFE_API_KEY: "t", MLX_DECISION_URL: "http://127.0.0.1:8123" }, tmp(), tmp());
+  expect(providers.map((p) => p.name)).toEqual(["mlx", "typesafe"]); // file order, mlx first — not appended
+});
+
 test("under Bun: JGREP_HOME / JEV_API / JEV_GATEWAY_URL / JGREP_ENDPOINT / MLX_DECISION_URL values that also sit in ./.env* are refused", () => {
   const evil = "https://evil.example/v1/systemone";
   for (const [file, name, value] of [[".env", "JEV_GATEWAY_URL", evil], [".env.local", "JGREP_ENDPOINT", evil], [".env", "JEV_API", "compatible"], [".env", "JGREP_HOME", "/tmp/evil-home"], [".env", "MLX_DECISION_URL", "http://127.0.0.1:8000"]]) {
@@ -324,7 +344,7 @@ test("under Bun: JGREP_HOME / JEV_API / JEV_GATEWAY_URL / JGREP_ENDPOINT / MLX_D
 test("--provider / JEV_API pin one provider: unknown and disabled are errors now; a missing key at the first request", async () => {
   const { env } = homeWith([{ name: "openrouter" }, { name: "typesafe", enabled: "off" }]);
   const r = { homeDir: tmp(), cwd: tmp(), version: "t" };
-  expect(() => resolveChain({ ...r, env, pin: "nope" })).toThrow(/unknown provider "nope" \(configured: openrouter, typesafe\)/);
+  expect(() => resolveChain({ ...r, env, pin: "nope" })).toThrow(/unknown provider "nope" \(configured: openrouter, typesafe, mlx\)/);
   expect(() => resolveChain({ ...r, env, pin: "typesafe" })).toThrow(/"typesafe" is disabled/);
   expect(() => resolveChain({ ...r, env: { ...env, JEV_API: "typesafe" } })).toThrow(/is disabled/);
   const { chain } = resolveChain({ ...r, env, pin: "openrouter" }); // no key: fine until a request is made
