@@ -487,7 +487,20 @@ export function loadProviders(env: Env = process.env, homeDir: string = os.homed
   // when the hosted providers fail or the budget is spent. A file that names mlx keeps its own
   // (its position, its enabled flag — enabled:false removes it from the chain, by design).
   // The built-in chain (no file) already ends in mlx; only a file that omits it is amended.
-  if (doc && !entries.some((e) => e.name === "mlx")) entries.push(checkEntry({ ...BUILTINS.find((b) => b.name === "mlx")! }, `${file} (appended mlx fallback)`));
+  if (doc && !entries.some((e) => e.name === "mlx")) {
+    const mlx = checkEntry({ ...BUILTINS.find((b) => b.name === "mlx")! }, `${file} (appended mlx fallback)`);
+    // The one-key-one-provider check ran inside buildEntries before this append, so a custom
+    // enabled provider that uses $MLX_DECISION_API_KEY would collide with the appended mlx
+    // undetected. Check it here: the appended mlx is keyless on loopback, but an https
+    // MLX_DECISION_URL would send the same key to two servers (TRDD-3KBUODCE review finding).
+    if (mlx.enabled) for (const s of credList(mlx.api_key) as string[]) {
+      const n = varName(s);
+      if (!n) continue;
+      const clash = entries.find((e) => e.enabled && e.name !== "mlx" && [...credList(e.api_key), ...credList(e.account_id)].some((x) => varName(x) === n));
+      if (clash) throw configError(`${file}: $${n} is used by both "${clash.name}" and the appended mlx fallback; a key may belong to one provider only (name mlx in the file and disable it, or rename one)`);
+    }
+    entries.push(mlx);
+  }
   if (doc && draft === undefined) checkFileMode(doc, file);
   const providers = entries.map((e): Provider => {
     let acct: { value: string; tried: string[] } | undefined;
