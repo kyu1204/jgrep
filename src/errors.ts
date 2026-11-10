@@ -5,7 +5,7 @@ export const ERROR_KINDS = [
   "insufficient_credits", "invalid_api_key", "model_unavailable", "rate_limited",
   "bad_request", "malformed_response", "server_unreachable", "tls_error",
   "timeout", "circuit_breaker_open",
-  "budget_exhausted", // WI-7 --budget: run-policy stop, never a provider failure
+  "budget_exhausted", // WI-7 --budget: a per-provider reservation refusal (TRDD-3KBUODCE): falls back to the next entry (a free local server at $0 is reached); still non-fatal (not in FATAL_KINDS)
   "forbidden",        // OpenRouter 403: moderation flag or a key/model permission — per request, never fatal
 ] as const;
 export type JevErrorKind = (typeof ERROR_KINDS)[number];
@@ -34,10 +34,13 @@ export class JevProviderError extends Error {
 export const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([408, 429, 500, 502, 503, 504, 529]);
 export const NON_RETRYABLE_STATUSES: ReadonlySet<number> = new Set([400, 401, 402, 403, 404, 405, 422]);
 /** Fatal kinds trip the circuit breaker and abort the run early (§1.5).
- *  "budget_exhausted" (WI-7 --budget) is deliberately NOT here: it is run policy, not
- *  a provider failure — non-retryable by construction (nothing to retry) but it must
- *  not count toward the breaker, so every remaining batch reports the same budget stop
- *  instead of the run mutating into circuit_breaker_open errors. */
+ *  "budget_exhausted" (WI-7 --budget) is deliberately NOT here: it is a per-provider
+ *  reservation refusal (TRDD-3KBUODCE), not a provider failure — non-retryable by
+ *  construction (nothing to retry) but it must not count toward the breaker, so every
+ *  remaining batch reports the same budget stop instead of the run mutating into
+ *  circuit_breaker_open errors. It IS a fallback kind (FALLBACK_KINDS): a pricier entry
+ *  that refuses falls back to the next one, so a free local server (mlx, $0) is reached
+ *  even when the budget is spent. */
 export const FATAL_KINDS: ReadonlySet<JevErrorKind> = new Set([
   "insufficient_credits", "invalid_api_key", "model_unavailable", "server_unreachable", "tls_error",
 ]);

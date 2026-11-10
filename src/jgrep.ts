@@ -678,38 +678,49 @@ export class BudgetMeter {
     return `warning: the provider billed ~$${this.seenPerMtok.toPrecision(3)}/Mtok this run, above the $${this.pricePerMtok}/Mtok that --budget reserves at; ` +
       `set JEV_PRICE_PER_MTOK=${this.seenPerMtok.toPrecision(3)} so the cap reserves enough`;
   }
-  /** Reserve, send, settle. Throws budget_exhausted — with nothing sent — when the
-   *  request does not fit. budget_exhausted is non-retryable but deliberately NOT fatal
-   *  (errors.ts FATAL_KINDS): the breaker never trips on it, so every remaining batch
-   *  reports the same stop instead of the run becoming circuit_breaker_open. */
-  async run<T extends { usage?: { input_tokens?: number }; cost?: number }>(req: unknown, provider: string, send: () => Promise<T>): Promise<T> {
-    const est = (estimateTokens({ requests: 1, chars: JSON.stringify(req).length }) * this.pricePerMtok) / 1e6;
-    if (this.spent + this.reserved + est > this.budget)
+  /** Reserve before a request goes out. Throws budget_exhausted — with nothing sent — when
+   *  the request does not fit. Priced at `price` (the entry's own usd_per_mtok, 0 for the
+   *  free local mlx server): a zero estimate never refuses, so a nearly-spent budget falls
+   *  back to the free provider instead of stopping the run. Returns the estimate it reserved,
+   *  for settle() to release or convert to spend. */
+  reserve(req: unknown, provider: string, price: number): number {
+    const est = (estimateTokens({ requests: 1, chars: JSON.stringify(req).length }) * price) / 1e6;
+    if (est > 0 && this.spent + this.reserved + est > this.budget)
       throw new JevProviderError(
         "budget_exhausted",
         `budget exhausted: $${this.spent.toFixed(4)} spent${this.reserved > 0 ? ` + $${this.reserved.toFixed(4)} in flight` : ""} of the $${this.budget} --budget; the next request needs ~$${est.toFixed(4)}`,
         { provider, retryable: false, hint: "raise --budget" },
       );
     this.reserved += est;
+    return est;
+  }
+  /** Settle after the request: release the reservation, add the real cost as spend. A failure
+   *  the provider may still have billed keeps its estimate as spend (audit: settling those at
+   *  $0 let the cap be exceeded). Likely billed: a 200 with a malformed body, a client-side
+   *  timeout (the server may have finished the work) and a 5xx (the server reached the
+   *  request). Never processed — released: 4xx refusals, 429 and connection failures. */
+  settle(res: { usage?: { input_tokens?: number }; cost?: number } | undefined, est: number, price: number, err?: JevProviderError): void {
+    this.reserved -= est;
     let real = 0;
-    try {
-      const res = await send();
-      real = settledCost(res, this.pricePerMtok);
+    if (res) {
+      real = settledCost(res, price);
       const tok = res.usage?.input_tokens;
       if (res.cost !== undefined && tok) this.seenPerMtok = Math.max(this.seenPerMtok, (res.cost / tok) * 1e6);
+    } else if (err && (err.kind === "malformed_response" || err.kind === "timeout" || (err.status !== undefined && err.status >= 500))) real = est;
+    this.spent += real;
+  }
+  /** Reserve, send, settle — the single-provider wrapper kept for roadmap.test.ts and library
+   *  callers that pass one backend. The chain path (ProviderChain.post) calls reserve/settle
+   *  directly so each entry is priced at its own usd_per_mtok. */
+  async run<T extends { usage?: { input_tokens?: number }; cost?: number }>(req: unknown, provider: string, send: () => Promise<T>): Promise<T> {
+    const est = this.reserve(req, provider, this.pricePerMtok);
+    try {
+      const res = await send();
+      this.settle(res, est, this.pricePerMtok);
       return res;
     } catch (e) {
-      // A failure the provider may still have billed keeps its reservation as spend
-      // (audit: settling those at $0 let the cap be exceeded). Likely billed: a 200 with a
-      // malformed body, a client-side timeout (the server may have finished the work) and
-      // a 5xx (the server reached the request). Never processed — released: 4xx refusals
-      // (bad key, credits, bad request, missing model), 429 and connection failures.
-      // ponytail: a retried batch is charged ONE estimate, not one per attempt.
-      if (e instanceof JevProviderError && (e.kind === "malformed_response" || e.kind === "timeout" || (e.status !== undefined && e.status >= 500))) real = est;
+      this.settle(undefined, est, this.pricePerMtok, e instanceof JevProviderError ? e : undefined);
       throw e;
-    } finally {
-      this.reserved -= est;
-      this.spent += real;
     }
   }
 }
@@ -841,14 +852,15 @@ export async function jgrep(question: string, input: Chunk[], o: Options): Promi
   let cost: number | undefined; // undefined until a request is answered; then the settledCost sum
   const price = o.pricePerMtok ?? DEFAULT_PRICE_PER_MTOK;
   // --budget (B1): one meter for the main, verify and tag passes; none without a budget.
+  // The meter is passed into post() (TRDD-3KBUODCE): each chain entry reserves at its own
+  // usd_per_mtok, so a free local server (mlx, 0) is reached even when the budget is spent.
   const meter = o.meter ?? (o.budget !== undefined ? new BudgetMeter(o.budget, price) : undefined);
-  /** Every provider request of this run goes through here: the provider chain (per-batch
-   *  deadline per provider, retries included, §1.6.1; fallback; lazy key), and ONE budget
-   *  reservation for the request whichever provider answers it. */
-  const send = (req: { model: string; state: unknown; questions: Record<string, unknown> }) => {
-    const go = () => chain.post(req, post, timeoutMs);
-    return meter ? meter.run(req, chain.name(), go) : go();
-  };
+  if (meter) post.meter = meter;
+  /** Every provider request goes through the chain (per-batch deadline, retries, fallback,
+   *  lazy key). --budget reserves per provider inside post() (TRDD-3KBUODCE): each entry at
+   *  its own usd_per_mtok, so a free local server (mlx, 0) is reached even when the budget
+   *  is nearly spent. */
+  const send = (req: { model: string; state: unknown; questions: Record<string, unknown> }) => chain.post(req, post, timeoutMs);
   /** The model that answered each chunk judged this run: its siblings' cache entries use it. */
   const answeredBy = new Map<number, string>();
   // Run-level success flag (plan §1.5): drives the invalid_api_key expired-vs-wrong-key

@@ -288,8 +288,10 @@ export async function selectTests(diff: string, tests: TestFile[], o: SelectOpti
   let hadSuccess = false;
   // --budget (audit MAJOR): --tests used to have no meter, so --budget / $JEV_BUDGET were
   // silently ignored here while every other mode honoured them. Same opt-in reservation
-  // meter as jgrep()/scoreRows(); no budget = no meter.
+  // meter as jgrep()/scoreRows(); no budget = no meter. The meter is passed into post()
+  // (TRDD-3KBUODCE): each chain entry reserves at its own usd_per_mtok.
   const meter = o.meter ?? (o.budget !== undefined ? new BudgetMeter(o.budget, price) : undefined);
+  if (meter) post.meter = meter;
   const worker = async (b: number[], index: number): Promise<BatchOutcome> => {
     const state = { diff: parts[units[b[0]].part], tests: b.map((ui, j) => ({ id: `t${j}`, file: tests[units[ui].test].file, signature: units[ui].sig })) };
     const questions: Record<string, unknown> = {};
@@ -299,9 +301,10 @@ export async function selectTests(diff: string, tests: TestFile[], o: SelectOpti
     const req = { model, state, questions };
     // --estimate: count before any provider is asked, so a dry run needs no key.
     if (o.estimate) { o.estimate.requests++; o.estimate.chars += JSON.stringify(req).length; return { index, entries: [], malformed: [] }; }
-    // per-batch deadline per provider, retries included; one budget reservation per request
-    const go = () => chain.post(req, post, timeoutMs);
-    const res = await (meter ? meter.run(req, chain.name(), go) : go()); // throws budget_exhausted unsent
+    // per-batch deadline per provider, retries included; --budget reserves per provider
+    // inside post() (TRDD-3KBUODCE): a free local server (mlx, 0) is reached even when the
+    // budget is nearly spent.
+    const res = await chain.post(req, post, timeoutMs);
     tokens += res.usage?.input_tokens ?? 0;
     cost = (cost ?? 0) + settledCost(res, price);
     // Finite p-values go straight into the in-memory cache object: cli.ts persists it in

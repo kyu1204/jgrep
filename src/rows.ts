@@ -230,14 +230,19 @@ export async function scoreRows(rows: Row[], questions: Questions, o: RowsOption
   let hadSuccess = false;
   // --budget (B4): rows used to ignore the budget entirely (cli.ts passed it, RowsOptions
   // dropped it). Same opt-in reservation meter as jgrep(); no budget = no meter.
+  // --budget (B4): rows used to ignore the budget entirely (cli.ts passed it, RowsOptions
+  // dropped it). Same opt-in reservation meter as jgrep(); no budget = no meter. The meter
+  // is passed into post() (TRDD-3KBUODCE): each chain entry reserves at its own usd_per_mtok.
   const meter = o.meter ?? (o.budget !== undefined ? new BudgetMeter(o.budget, price) : undefined);
+  if (meter) post.meter = meter;
   const worker = async (b: number[], index: number): Promise<PackOutcome> => {
     const req = buildRowsRequest(b.map((ui) => units[ui].data), questions, model);
     // --estimate: count before any provider is asked, so a dry run needs no key.
     if (o.estimate) { o.estimate.requests++; o.estimate.chars += JSON.stringify(req).length; return { index, unitResults: [] }; }
-    // per-batch deadline per provider, retries included (§1.6.1); one budget reservation per request
-    const go = () => chain.post(req, post, timeoutMs);
-    const res = await (meter ? meter.run(req, chain.name(), go) : go()); // throws budget_exhausted unsent
+    // per-batch deadline per provider, retries included (§1.6.1); --budget reserves per
+    // provider inside post() (TRDD-3KBUODCE): a free local server (mlx, 0) is reached even
+    // when the budget is nearly spent.
+    const res = await chain.post(req, post, timeoutMs);
     tokens += res.usage?.input_tokens ?? 0;
     cost = (cost ?? 0) + settledCost(res, price);
     const unitResults = b.map((ui, j) => {

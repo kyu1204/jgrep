@@ -8,6 +8,15 @@ import {
   classifyStatus, classifyTransport, isRedirectError, jitteredDelayMs, parseRetryAfter, JevProviderError,
   RETRY_AFTER_MAX_MS, type JevErrorKind,
 } from "./errors";
+// BudgetMeter is defined in jgrep.ts; importing it here (even type-only) creates a runtime
+// circular import under Bun, so PostOpts holds a structural type with the surface post() uses.
+// providers.ts must not import jgrep.ts at runtime (Step 4 rewires callers).
+export interface BudgetMeterLike {
+  budget: number;
+  pricePerMtok: number;
+  reserve(req: unknown, provider: string, price: number): number;
+  settle(res: { usage?: { input_tokens?: number }; cost?: number } | undefined, est: number, price: number, err?: { kind: string; status?: number }): void;
+}
 // @ts-expect-error — no @types/node in this zero-dep Bun-only repo; the surface used is trivial
 import * as fs from "node:fs";
 // @ts-expect-error — no @types/node in this zero-dep Bun-only repo
@@ -473,6 +482,12 @@ export function loadProviders(env: Env = process.env, homeDir: string = os.homed
   const file = providersFile(env, homeDir);
   const doc = draft ?? readProvidersDoc(env, homeDir);
   const entries = buildEntries(doc ?? builtinDoc(), doc ? file : "built-in providers");
+  // Structural free-local fallback (TRDD-3KBUODCE): a file that names no "mlx" entry gets the
+  // built-in mlx entry appended LAST, so every chain ends in a free local server that answers
+  // when the hosted providers fail or the budget is spent. A file that names mlx keeps its own
+  // (its position, its enabled flag — enabled:false removes it from the chain, by design).
+  // The built-in chain (no file) already ends in mlx; only a file that omits it is amended.
+  if (doc && !entries.some((e) => e.name === "mlx")) entries.push(checkEntry({ ...BUILTINS.find((b) => b.name === "mlx")! }, `${file} (appended mlx fallback)`));
   if (doc && draft === undefined) checkFileMode(doc, file);
   const providers = entries.map((e): Provider => {
     let acct: { value: string; tried: string[] } | undefined;
@@ -619,7 +634,7 @@ export type ChainLog = (e: JevProviderError, entry: ChainEntry, fallback: string
  *  would fail on every provider, so it never falls back. */
 export const FALLBACK_KINDS: ReadonlySet<JevErrorKind> = new Set<JevErrorKind>([
   "invalid_api_key", "insufficient_credits", "model_unavailable", "rate_limited", "server_unreachable",
-  "timeout", "tls_error", "malformed_response", "forbidden",
+  "timeout", "tls_error", "malformed_response", "forbidden", "budget_exhausted",
 ]);
 const KEY_KINDS: ReadonlySet<JevErrorKind> = new Set<JevErrorKind>(["invalid_api_key", "insufficient_credits"]);
 
@@ -672,13 +687,25 @@ export class ProviderChain {
         if (gate) { await gate; if (this.dead.has(name)) continue; }
         else this.first.set(name, new Promise<void>((resolve) => { open = resolve; }));
       }
-      if (e.warning && !this.warned.has(name)) { this.warned.add(name); this.opts.warn?.(e.warning); }
+if (e.warning && !this.warned.has(name)) { this.warned.add(name); this.opts.warn?.(e.warning); }
+      // --budget per provider (TRDD-3KBUODCE): each attempt reserves at THIS entry's own
+      // usd_per_mtok (0 for the free local mlx server), not the run price, so a nearly-spent
+      // budget still allows the free provider — budget_exhausted on a pricier entry falls back
+      // to the next one instead of stopping the run. ponytail: a retried batch is charged ONE
+      // estimate per attempt that reserves (an entry whose reserve throws never sends).
+      const meter = opts.meter;
+      const entryPrice = typeof e.backend.usdPerMtok === "number" ? e.backend.usdPerMtok : undefined;
+      const pricedAt = entryPrice ?? meter?.pricePerMtok ?? 0;
+      let est = 0;
       try {
+        if (meter) est = meter.reserve(body, name, pricedAt);
         const res = await postSystemOne({ ...body, model: e.model }, e.backend, e.key(), { ...opts, deadlineMs: Date.now() + timeoutMs });
+        if (meter) meter.settle(res, est, pricedAt);
         const used = `${name} (${e.model})`;
         this.used.set(used, (this.used.get(used) ?? 0) + 1);
         return { ...res, via: { provider: name, model: e.model } };
       } catch (err) {
+        if (meter) meter.settle(undefined, est, pricedAt, err instanceof JevProviderError ? err : undefined);
         if (!(err instanceof JevProviderError)) throw err;
         const falls = multi && FALLBACK_KINDS.has(err.kind);
         const next = falls ? this.entries.slice(i + 1).find((x) => !this.dead.has(x.backend.name)) : undefined;
@@ -863,6 +890,11 @@ export interface PostOpts {
   maxRetries?: number;                   // default 4 (=> 5 total attempts)
   sleep?: (ms: number) => Promise<void>; // DI for tests
   limiter?: RateLimiter;                 // shared token bucket
+  /** The run's --budget meter (TRDD-3KBUODCE): each chain attempt reserves and settles
+   *  through it at THIS entry's own price before its request goes out. Priced per
+   *  provider, not per run: a free local server (usd_per_mtok 0) reserves nothing, so a
+   *  nearly-spent budget falls back to it instead of stopping the run. */
+  meter?: BudgetMeterLike;
 }
 
 const isOpenRouterHost = (url: string): boolean => {
