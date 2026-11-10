@@ -266,6 +266,53 @@ test("cli main mlx: MLX_DECISION_URL reaches the wire — POST /v1/systemone wit
   }
 }, 20_000);
 
+
+// The feature's whole point — mlx is reached when a hosted provider fails — had only a manual
+// run behind it. A unit assertion on BUILTINS proves the ORDER; this proves the run actually
+// falls through to the local server and answers from it.
+test("cli main mlx: a failing hosted provider falls back to the local server and answers from it", async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const reply = (chunks: { id: string }[]) => {
+    const a: Record<string, unknown> = {};
+    for (const c of chunks) a[c.id] = { type: "noul", noul: 0.9 };
+    return new Response(JSON.stringify({ answers: a, usage: { input_tokens: 10 } }), { status: 200 });
+  };
+  let hosted = 0, local = 0;
+  const deadHost = Bun.serve({ port: 0, fetch: () => { hosted++; return new Response("down", { status: 500 }); } });
+  const localSrv = Bun.serve({ port: 0, fetch: async (req: Request) => {
+    local++;
+    const body: { state?: { chunks?: { id: string }[] } } = await req.json();
+    return reply(body.state?.chunks ?? []);
+  } });
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "jgrep-fb-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "jgrep-fb-src-"));
+  try {
+    // A dead hosted provider first, mlx second: providers.json IS the chain, in its order.
+    const pf = path.join(home, "providers.json");
+    fs.writeFileSync(pf, JSON.stringify({ version: 1, providers: [
+      { name: "compatible", base_url: `http://127.0.0.1:${deadHost.port}`, api_key: "x" },
+      { name: "mlx" },
+    ] }));
+    fs.chmodSync(pf, 0o600); // a literal api_key requires a private file (checkFileMode)
+    fs.writeFileSync(path.join(dir, "a.ts"), "export function alpha() {\n  return 1;\n}\n");
+    const p = await spawn(
+      ["bun", "src/cli.ts", "--no-cache", "--retries", "0", "returns a number", dir],
+      { ...process.env, JGREP_NO_MAIN: "", JGREP_HOME: home, MLX_DECISION_URL: `http://127.0.0.1:${localSrv.port}` },
+    );
+    expect(p.exitCode).toBe(0); // the run survived by using the local server
+    expect(hosted).toBeGreaterThan(0); // the hosted provider really was tried first
+    expect(local).toBeGreaterThan(0); // ...and mlx answered
+    expect(p.stderr).toMatch(/fallback: compatible → mlx/);
+    expect(p.stderr).toContain("elephant-1"); // the report names the local model
+  } finally {
+    deadHost.stop(true);
+    localSrv.stop(true);
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}, 20_000);
 test("cli main rows: --json emits the position-aligned flattened array; --json-errors wraps it; --out follows the flag", async () => {
   const fs = await import("node:fs");
   const os = await import("node:os");

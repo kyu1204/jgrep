@@ -178,18 +178,22 @@ With no file, the chain is the six built-ins in this order:
   only after a hosted provider failed or ran out of credits. jgrep never starts
   it (`mlx-decision server -m baselabs/elephant-1`, ~15 GB of RAM, one per
   machine) — export `MLX_DECISION_URL` while it runs, and with none set the entry
-  is skipped like `compatible` without an endpoint. elephant-1 is far slower than a
-  hosted model: 47 chunks of `src/cli.ts` took about 3 minutes in 16-chunk batches on
-  an M-series Mac, and one 16-chunk batch of its large chunks already outlived the
-  15 s default `--timeout`. Raise `--timeout` (and `--request-timeout`) for local runs.
-  It answers concurrent requests (20 chunks at `-c 16` took 4.9 s; serial at `-c 1`,
-  14.0 s), so keep the default concurrency and raise only the timeouts. Two
-  consequences of a server that is free but not free-priced: `--budget` and
-  `--estimate` still reserve at the run-wide `$JEV_PRICE_PER_MTOK`, so `--budget 0`
-  refuses a free local answer (leave the budget off when the chain may reach mlx);
-  and the probabilities are the local model's own — a `p` from elephant-1 is not
-  comparable with a `p` from Jev, though the `fallback:` line and the per-model
-  cache keep the two apart.
+  is skipped like `compatible` without an endpoint. elephant-1 is far slower than
+  a hosted model: measured on one M-series Mac, 47 chunks of `src/cli.ts` took
+  about 3 minutes in 16-chunk batches, and a 16-chunk batch of large chunks
+  already outlived the 15 s default `--timeout` — raise `--timeout` (and
+  `--request-timeout`) for local runs. The server handled concurrent requests in
+  the same measurement (serial `-c 1` was 3x slower than `-c 16`), so the default
+  concurrency stays right; re-measure after a server or model upgrade, since the
+  timings describe one build of both. `jgrep status` reporting `ready` means the
+  server answered `GET /health`, not that the model is resident: a server shared
+  with other tools may have evicted elephant-1, and the run then shows timeouts.
+  Two consequences of a server that is free but not free-priced: `--budget` and
+  `--estimate` still reserve at the run-wide `$JEV_PRICE_PER_MTOK`, so a budget
+  the hosted providers have nearly spent also refuses a free local answer (leave
+  the budget off when the chain may reach mlx); and the probabilities are the
+  local model's own — a `p` from elephant-1 is not comparable with a `p` from
+  Jev, though the `fallback:` line and the per-model cache keep the two apart.
 - **Circuit breaker.** A provider that failed is skipped for the rest of the run,
   and until a provider has answered once the run's other requests wait for that
   first one, so a dead key costs one request, not one per batch. An answer a
