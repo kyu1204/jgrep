@@ -15,10 +15,10 @@ description: >-
 # jgrep
 
 `jgrep "<description in English>" [paths]` asks a fast decision model (Jev, via
-OpenRouter, TypeSafe, a compatible endpoint, Cloudflare or Vercel) one yes/no
-question per 5-60 line chunk and prints the chunks that match. It never reads
-files into your context: you get a short list, then you Read only the ranges you
-need.
+OpenRouter, TypeSafe, a compatible endpoint, Cloudflare, Vercel, or a local
+mlx-decision server) one yes/no question per 5-60 line chunk and prints the
+chunks that match. It never reads files into your context: you get a short list,
+then you Read only the ranges you need.
 
 ## Setup
 
@@ -30,7 +30,8 @@ curl -fsSL https://raw.githubusercontent.com/Emasoft/jgrep/main/install-dev.sh |
 ```
 
 Providers are listed in `~/.jgrep/providers.json`, in fallback order (no file:
-openrouter, typesafe, compatible, cloudflare, vercel). Each entry's key is an env
+openrouter, typesafe, compatible, cloudflare, vercel, then a local mlx-decision
+server once `MLX_DECISION_URL` is set). Each entry's key is an env
 var (`"api_key": "$OPENROUTER_API_KEY"`) or a literal key; a provider whose key is
 unset is skipped, and a request that fails on a rejected key, no credits, a missing
 model, a 429/5xx or a network error (never a malformed request) moves to the next
@@ -151,11 +152,13 @@ provider and keys (~/.jgrep/providers.json; `jgrep status` shows the chain)
     compatible  JEV_GATEWAY_API_KEY
     cloudflare  JEV_CLOUDFLARE_API_TOKEN / CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID
     vercel      AI_GATEWAY_API_KEY
+    mlx         MLX_DECISION_API_KEY
 
 environment
   JEV_GATEWAY_URL       compatible: full System One endpoint when providers.json gives
                         no base_url; https:// or a loopback http:// server that needs no
                         key (alias JGREP_ENDPOINT; process env only, never ./.env)
+  MLX_DECISION_URL      mlx: base URL of a local mlx-decision server (unset: skipped; env only)
   JGREP_HOME            jgrep's home instead of ~/.jgrep (absolute path)
   JEV_BUDGET            default --budget in dollars (the flag wins)
   JEV_PRICE_PER_MTOK    dollars per million input tokens for --estimate, --budget and

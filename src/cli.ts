@@ -144,6 +144,7 @@ environment
   JEV_GATEWAY_URL       compatible: full System One endpoint when providers.json gives
                         no base_url; https:// or a loopback http:// server that needs no
                         key (alias JGREP_ENDPOINT; process env only, never ./.env)
+  MLX_DECISION_URL      mlx: base URL of a local mlx-decision server (unset: skipped; env only)
   JGREP_HOME            jgrep's home instead of ~/.jgrep (absolute path)
   JEV_BUDGET            default --budget in dollars (the flag wins)
   JEV_PRICE_PER_MTOK    dollars per million input tokens for --estimate, --budget and

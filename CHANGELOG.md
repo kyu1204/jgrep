@@ -15,11 +15,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rejected key, no credits, an unavailable model, or a 429/5xx/network failure after
   retries moves the request to the next one (never a 400/422). When the file exists
   the chain is exactly its entries; without it, the built-ins in order openrouter,
-  typesafe, compatible, cloudflare, vercel. `api_key` is `"$VAR"`, `"${VAR}"`, a
+  typesafe, compatible, cloudflare, vercel, mlx. `api_key` is `"$VAR"`, `"${VAR}"`, a
   literal key (the file must then be `chmod 600`) or an array; `"enabled"` accepts
   true/false and yes/no, y/n, on/off, 1/0, enabled/disabled, enable/disable,
   active/inactive (any case), anything else is a config error; every field is
   validated strictly. Example: `providers.example.json` (shipped).
+- **`mlx`: a local mlx-decision server as the last fallback** (elephant-1). It
+  speaks the System One request and answer, so no adapter was needed; it needs no
+  key on loopback and costs nothing. `MLX_DECISION_URL` (process environment only,
+  never `./.env`) gives its base URL — a full `/v1/systemone` URL works too — and
+  with the variable unset the entry is `no-url` and skipped, so a machine not
+  running the server behaves exactly as before. jgrep never starts the server
+  (`mlx-decision server -m baselabs/elephant-1`): one per machine, ~15 GB of RAM,
+  often shared with other tools.
 - A failed provider is skipped for the rest of the run, and until a provider has
   answered once the run's other requests wait for it (a dead key costs one
   request). The run ends with a `fallback:` line when it moved, and every provider

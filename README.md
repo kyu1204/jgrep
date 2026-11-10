@@ -139,7 +139,7 @@ network error after its retries moves on to the next one. A request-shape error
 }
 ```
 
-With no file, the chain is the five built-ins in this order:
+With no file, the chain is the six built-ins in this order:
 
 | name         | endpoint                                                             | default model          | key (`api_key`)                                                     | free key check |
 | ------------ | -------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------- | -------------- |
@@ -148,6 +148,7 @@ With no file, the chain is the five built-ins in this order:
 | `compatible` | `base_url` + `path`, or `$JEV_GATEWAY_URL` (any System One endpoint) | `jev-latest`           | `$JEV_GATEWAY_API_KEY`                                              | none           |
 | `cloudflare` | `https://api.cloudflare.com/client/v4/accounts/<id>/ai/run`          | `typesafe/jev`         | `$JEV_CLOUDFLARE_API_TOKEN`, `$CLOUDFLARE_API_TOKEN` + `$CLOUDFLARE_ACCOUNT_ID` | `/user/tokens/verify` |
 | `vercel`     | `https://ai-gateway.vercel.sh/v4/ai/evaluation-model`                | `typesafe-ai/jev`      | `$AI_GATEWAY_API_KEY`                                               | none           |
+| `mlx`        | `$MLX_DECISION_URL` + `/v1/systemone` (local server)                 | `elephant-1`           | `$MLX_DECISION_API_KEY` (none on loopback)                          | `/health`      |
 
 - **The file is the chain, exactly.** When providers.json exists, only its entries
   are used, in its order; a built-in it does not name is never appended. An entry
@@ -171,6 +172,24 @@ With no file, the chain is the five built-ins in this order:
   no fallback. `--model` (or `JEV_MODEL`, `JGREP_MODEL`) applies to each provider
   whose model ids it fits (OpenRouter ids are `vendor/model`, TypeSafe ids have no
   slash); the others keep their own model, with a warning.
+- **`mlx`.** A local [mlx-decision](https://github.com/armbues/mlx-decision) server
+  speaks the same System One request and answer, so `elephant-1` runs on this
+  machine with no key and no per-call cost. It is LAST in the chain: it answers
+  only after a hosted provider failed or ran out of credits. jgrep never starts
+  it (`mlx-decision server -m baselabs/elephant-1`, ~15 GB of RAM, one per
+  machine) — export `MLX_DECISION_URL` while it runs, and with none set the entry
+  is skipped like `compatible` without an endpoint. elephant-1 is far slower than a
+  hosted model: 47 chunks of `src/cli.ts` took about 3 minutes in 16-chunk batches on
+  an M-series Mac, and one 16-chunk batch of its large chunks already outlived the
+  15 s default `--timeout`. Raise `--timeout` (and `--request-timeout`) for local runs.
+  It answers concurrent requests (20 chunks at `-c 16` took 4.9 s; serial at `-c 1`,
+  14.0 s), so keep the default concurrency and raise only the timeouts. Two
+  consequences of a server that is free but not free-priced: `--budget` and
+  `--estimate` still reserve at the run-wide `$JEV_PRICE_PER_MTOK`, so `--budget 0`
+  refuses a free local answer (leave the budget off when the chain may reach mlx);
+  and the probabilities are the local model's own — a `p` from elephant-1 is not
+  comparable with a `p` from Jev, though the `fallback:` line and the per-model
+  cache keep the two apart.
 - **Circuit breaker.** A provider that failed is skipped for the rest of the run,
   and until a provider has answered once the run's other requests wait for that
   first one, so a dead key costs one request, not one per batch. An answer a
@@ -190,17 +209,20 @@ jgrep --provider openrouter "swallows errors" src/      # only OpenRouter, no fa
 jgrep status                                            # the chain and each provider's state
 JEV_GATEWAY_URL=http://127.0.0.1:11434/v1/systemone \
   jgrep --provider compatible --model nimble --tests HEAD~1   # a local server: no key needed
+# or fall back to a local mlx-decision server (elephant-1) when the hosted ones fail:
+MLX_DECISION_URL=http://127.0.0.1:8123 jgrep "swallows errors" src/
 ```
 
 A `base_url` must be `https://`, except a loopback `http://` server
 (`localhost`, `127.0.0.1`, `[::1]`), which also needs no key. providers.json is
 read only from jgrep's home, and `JEV_GATEWAY_URL` (alias `JGREP_ENDPOINT`) only
 from the environment (or the URL an older `jgrep init` saved in
-`~/.config/jgrep/env`), never from a project's `./.env`, so a cloned repo cannot
-redirect your key to its own server. **Run jgrep under node** (the installed bin
-does, via its shebang): bun loads `./.env` into the environment by itself, so under
-bun a `JGREP_HOME`, `JEV_API`, `JEV_GATEWAY_URL` or `JGREP_ENDPOINT` value that
-came from a `./.env*` file is refused. Requests never follow a redirect.
+`~/.config/jgrep/env`); `MLX_DECISION_URL` only from the environment. None of them
+is ever read from a project's `./.env`, so a cloned repo cannot redirect your key
+to its own server. **Run jgrep under node** (the installed bin does, via its
+shebang): bun loads `./.env` into the environment by itself, so under bun a
+`JGREP_HOME`, `JEV_API`, `JEV_GATEWAY_URL`, `JGREP_ENDPOINT` or `MLX_DECISION_URL`
+value that came from a `./.env*` file is refused. Requests never follow a redirect.
 
 Requests to openrouter.ai carry OpenRouter's app-attribution headers
 (`HTTP-Referer`, `X-OpenRouter-Title` and its older alias `X-Title`, both `jgrep`,
@@ -590,11 +612,13 @@ provider and keys (~/.jgrep/providers.json; `jgrep status` shows the chain)
     compatible  JEV_GATEWAY_API_KEY
     cloudflare  JEV_CLOUDFLARE_API_TOKEN / CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID
     vercel      AI_GATEWAY_API_KEY
+    mlx         MLX_DECISION_API_KEY
 
 environment
   JEV_GATEWAY_URL       compatible: full System One endpoint when providers.json gives
                         no base_url; https:// or a loopback http:// server that needs no
                         key (alias JGREP_ENDPOINT; process env only, never ./.env)
+  MLX_DECISION_URL      mlx: base URL of a local mlx-decision server (unset: skipped; env only)
   JGREP_HOME            jgrep's home instead of ~/.jgrep (absolute path)
   JEV_BUDGET            default --budget in dollars (the flag wins)
   JEV_PRICE_PER_MTOK    dollars per million input tokens for --estimate, --budget and

@@ -72,8 +72,8 @@ test("jgrepHome: $JGREP_HOME (absolute) or ~/.jgrep; a relative JGREP_HOME is a 
   expect(e.message).toContain("absolute");
 });
 
-test("built-ins: openrouter, typesafe, compatible, cloudflare, vercel, in that order, with their endpoints and free checks", () => {
-  expect(BUILTINS.map((b) => b.name)).toEqual(["openrouter", "typesafe", "compatible", "cloudflare", "vercel"]);
+test("built-ins: openrouter, typesafe, compatible, cloudflare, vercel, mlx, in that order, with their endpoints and free checks", () => {
+  expect(BUILTINS.map((b) => b.name)).toEqual(["openrouter", "typesafe", "compatible", "cloudflare", "vercel", "mlx"]);
   expect(openrouter).toMatchObject({ url: "https://openrouter.ai/api/v1/systemone", model: "~typesafe/jev-latest", verify: "https://openrouter.ai/api/v1/key", apiKey: ["$OPENROUTER_API_KEY"], adapter: "system-one" });
   expect(typesafe).toMatchObject({ url: "https://api.typesafe.ai/v1/systemone", model: "jev-latest", verify: "https://api.typesafe.ai/v1/models", apiKey: ["$JEV_API_KEY", "$TYPESAFE_API_KEY"] });
   expect(BACKENDS.compatible).toMatchObject({ url: "", model: "jev-latest", verify: null, apiKey: ["$JEV_GATEWAY_API_KEY"] });
@@ -83,9 +83,9 @@ test("built-ins: openrouter, typesafe, compatible, cloudflare, vercel, in that o
 });
 
 test("no providers.json: the built-in chain, openrouter first; an unset key is a state, not an error", () => {
-  expect(names({ JGREP_HOME: tmp() })).toEqual(["openrouter:no-key", "typesafe:no-key", "compatible:no-url", "cloudflare:no-key", "vercel:no-key"]);
+  expect(names({ JGREP_HOME: tmp() })).toEqual(["openrouter:no-key", "typesafe:no-key", "compatible:no-url", "cloudflare:no-key", "vercel:no-key", "mlx:no-url"]);
   const { providers } = loadProviders({ JGREP_HOME: tmp(), OPENROUTER_API_KEY: "sk-or-1", TYPESAFE_API_KEY: "t", CLOUDFLARE_ACCOUNT_ID: "abc123" }, tmp(), tmp());
-  expect(providers.map((p) => p.state)).toEqual(["ready", "ready", "no-url", "no-key", "no-key"]);
+  expect(providers.map((p) => p.state)).toEqual(["ready", "ready", "no-url", "no-key", "no-key", "no-url"]);
   expect(providers[0].keySource).toBe("$OPENROUTER_API_KEY");
   expect(providers[1].tried).toEqual(["$JEV_API_KEY", "$TYPESAFE_API_KEY"]);
   expect(providers[3].url).toBe("https://api.cloudflare.com/client/v4/accounts/abc123/ai/run");
@@ -285,10 +285,30 @@ test("compatible: JEV_GATEWAY_URL (alias JGREP_ENDPOINT) is its full endpoint; h
   write(path.join(evil, ".env"), "JGREP_ENDPOINT=https://attacker.example/x\nJEV_GATEWAY_URL=https://attacker.example/x\nJEV_GATEWAY_API_KEY=gw\n");
   expect(at({}, evil).state).toBe("no-url"); // the URL only from the process env
 });
+test("mlx: MLX_DECISION_URL is its base URL (a full /v1/systemone works too); no key on loopback, no-url without it", () => {
+  const cwd = tmp();
+  const mlx = (env: Record<string, string>) => loadProviders({ JGREP_HOME: tmp(), ...env }, tmp(), cwd).providers.find((p) => p.name === "mlx")!;
+  // The built-in carries no base_url, so a machine not running the server skips mlx silently
+  // ("no-url") instead of pointing at a port it does not have.
+  expect(mlx({}).state).toBe("no-url");
+  const base = mlx({ MLX_DECISION_URL: "http://127.0.0.1:8123" });
+  expect([base.url, base.verify, base.state, base.key, base.model])
+    .toEqual(["http://127.0.0.1:8123/v1/systemone", "http://127.0.0.1:8123/health", "ready", "", "elephant-1"]);
+  // A trailing slash and a full System One URL both land on the same endpoint, never /v1/systemone/v1/systemone.
+  for (const raw of ["http://127.0.0.1:8123/", "http://127.0.0.1:8123/v1/systemone"]) {
+    expect(mlx({ MLX_DECISION_URL: raw }).url).toBe("http://127.0.0.1:8123/v1/systemone");
+  }
+  expect(() => mlx({ MLX_DECISION_URL: "http://mlx.example.com" })).toThrow(/must use https/);
+  // providers.json's own base_url wins over the env fallback (the compatible rule): the env
+  // var exists so a machine can name its server without writing a file, not to override one.
+  const own = homeWith([{ name: "mlx", base_url: "http://127.0.0.1:9001" }]);
+  const p = loadProviders({ ...own.env, MLX_DECISION_URL: "http://127.0.0.1:9999" }, tmp(), tmp()).providers[0];
+  expect([p.url, p.verify, p.state]).toEqual(["http://127.0.0.1:9001/v1/systemone", "http://127.0.0.1:9001/health", "ready"]);
+});
 
-test("under Bun: JGREP_HOME / JEV_API / JEV_GATEWAY_URL / JGREP_ENDPOINT values that also sit in ./.env* are refused", () => {
+test("under Bun: JGREP_HOME / JEV_API / JEV_GATEWAY_URL / JGREP_ENDPOINT / MLX_DECISION_URL values that also sit in ./.env* are refused", () => {
   const evil = "https://evil.example/v1/systemone";
-  for (const [file, name, value] of [[".env", "JEV_GATEWAY_URL", evil], [".env.local", "JGREP_ENDPOINT", evil], [".env", "JEV_API", "compatible"], [".env", "JGREP_HOME", "/tmp/evil-home"]]) {
+  for (const [file, name, value] of [[".env", "JEV_GATEWAY_URL", evil], [".env.local", "JGREP_ENDPOINT", evil], [".env", "JEV_API", "compatible"], [".env", "JGREP_HOME", "/tmp/evil-home"], [".env", "MLX_DECISION_URL", "http://127.0.0.1:8000"]]) {
     const cwd = tmp();
     fs.writeFileSync(path.join(cwd, file), `${name}=${value}\n`);
     const e = errOf(() => loadProviders({ JGREP_HOME: tmp(), [name]: value }, tmp(), cwd));

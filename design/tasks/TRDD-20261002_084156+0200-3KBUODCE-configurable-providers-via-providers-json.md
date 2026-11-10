@@ -47,7 +47,7 @@ Provider configuration moves into one user-owned file, `~/.jgrep/providers.json`
 ```
 
 - Top level: `version` (must be 1) and `providers` (array). Any other key is an error.
-- Chain: when the file exists, EXACTLY its entries, in file order; a built-in the file does not name is never appended. An entry whose name is a built-in takes that built-in's fields as defaults, overridden field by field; any other name must give `base_url`, `path`, `adapter`, `api_key` and `model`. No file: the built-ins in order openrouter, typesafe, compatible, cloudflare, vercel.
+- Chain: when the file exists, EXACTLY its entries, in file order; a built-in the file does not name is never appended. An entry whose name is a built-in takes that built-in's fields as defaults, overridden field by field; any other name must give `base_url`, `path`, `adapter`, `api_key` and `model`. No file: the built-ins in order openrouter, typesafe, compatible, cloudflare, vercel, mlx (a local mlx-decision server via `MLX_DECISION_URL`, last: the offline elephant-1 fallback).
 - Entry fields (unknown field = error): `name` (`^[a-z][a-z0-9-]{1,31}$`, unique), `enabled`, `base_url`, `path`, `adapter`, `api_key`, `account_id`, `model`, `model_pattern`, `cost_field`, `usd_per_mtok`, `verify`, `headers`, `key_url` — same rules as Quicksilver:
   - `enabled`: absent = enabled; JSON true/false, 1/0, case-insensitive true/enabled/enable/1/yes/y/active/on and false/disabled/disable/0/no/n/inactive/off. Anything else is an error naming the provider and the value.
   - `base_url`: https, or http only to localhost/127.0.0.1/[::1]; no credentials, query or fragment.

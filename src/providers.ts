@@ -155,6 +155,16 @@ export const BUILTINS: ProviderEntry[] = [
   // The gateway replaces a model outside typesafe-ai/ with typesafe-ai/jev, so the pattern keeps ids honest. No free key check.
   { name: "vercel", base_url: "https://ai-gateway.vercel.sh", path: "/v4/ai/evaluation-model", adapter: "vercel-evaluation", api_key: "$AI_GATEWAY_API_KEY",
     model: "typesafe-ai/jev", model_pattern: "^typesafe-ai/", cost_field: null, verify: null },
+  // A local mlx-decision server (github.com/armbues/mlx-decision): its POST /v1/systemone IS the
+  // System One API, and elephant-1 is the local model. No key on loopback and no per-call cost;
+  // jgrep never starts it (one server per machine holds ~15 GB). LAST in the chain: it answers
+  // only after a hosted provider has failed. No base_url: MLX_DECISION_URL gives it, so a machine
+  // running nothing is "no-url" and skipped like compatible, never pointing at a port it lacks.
+  // model_pattern is the exact id: the server answers an unknown model name with its own
+  // default, and caching that under a foreign id would be wrong.
+  { name: "mlx", path: "/v1/systemone", adapter: "system-one", api_key: "$MLX_DECISION_API_KEY",
+    model: "elephant-1", model_pattern: "^elephant-1$", cost_field: null, usd_per_mtok: 0, verify: "/health",
+    key_url: "https://github.com/armbues/mlx-decision" },
 ];
 
 /** Billing pages for the out-of-credits hint (the hosted System One providers). */
@@ -459,7 +469,7 @@ function refuseBunDotenv(names: string[], env: Env, cwd: string): void {
  *  is no file), keys and account ids resolved. Throws on any config problem. `draft` is a
  *  document not written yet (`jgrep init` checks the entry it is about to save). */
 export function loadProviders(env: Env = process.env, homeDir: string = os.homedir(), cwd: string = process.cwd(), draft?: unknown): { providers: Provider[]; file: string; exists: boolean } {
-  refuseBunDotenv(["JGREP_HOME", "JEV_API", "JEV_GATEWAY_URL", "JGREP_ENDPOINT"], env, cwd);
+  refuseBunDotenv(["JGREP_HOME", "JEV_API", "JEV_GATEWAY_URL", "JGREP_ENDPOINT", "MLX_DECISION_URL"], env, cwd);
   const file = providersFile(env, homeDir);
   const doc = draft ?? readProvidersDoc(env, homeDir);
   const entries = buildEntries(doc ?? builtinDoc(), doc ? file : "built-in providers");
@@ -482,6 +492,18 @@ export function loadProviders(env: Env = process.env, homeDir: string = os.homed
     if (e.name === "compatible" && e.base_url === undefined && e.enabled) {
       const gw = gatewayUrlOf(env, homeDir);
       if (gw) { checkUrl(gw, "JEV_GATEWAY_URL"); b = { ...b, url: gw }; }
+    }
+    // A local mlx-decision server (github.com/armbues/mlx-decision). MLX_DECISION_URL is the
+    // server's base URL; a full System One endpoint is accepted too (the adjacent
+    // JEV_GATEWAY_URL habit), so the path is appended only when it is not already there.
+    // Process env only, never a project's ./.env (refuseBunDotenv below): a cloned repo
+    // must not point local requests at its own server. An explicit base_url in providers.json
+    // wins, exactly as it does for compatible: the env var is the fallback, not an override.
+    if (e.name === "mlx" && e.enabled && e.base_url === undefined && env.MLX_DECISION_URL?.trim()) {
+      const raw = (env.MLX_DECISION_URL as string).trim().replace(/\/$/, "");
+      checkUrl(raw, "MLX_DECISION_URL");
+      const base = raw.endsWith(e.path) ? raw.slice(0, -e.path.length) : raw;
+      b = { ...b, url: base + e.path, verify: e.verify ? base + e.verify : null };
     }
     const k = findKey(b, env, homeDir, cwd);
     // A local System One server (loopback http) needs no key: nothing is sent in the clear.

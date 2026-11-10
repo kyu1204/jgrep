@@ -230,6 +230,42 @@ test("cli main code: --json emits the bare v0.3.0 hit array ({file,start,end,p,t
   }
 }, 20_000);
 
+// The mlx entry's unit tests prove loadProviders COMPUTES the endpoint; this proves the request
+// actually lands there. Without it, a regression that keeps the config perfect and the wire wrong
+// (path dropped, model id not sent, a key demanded on loopback) would pass the whole suite.
+test("cli main mlx: MLX_DECISION_URL reaches the wire — POST /v1/systemone with model elephant-1 and no key", async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const seen: { path: string; model?: string; auth: string | null }[] = [];
+  const server = Bun.serve({
+    port: 0,
+    fetch: async (req: Request) => {
+      const body: { model?: string; state?: { chunks?: { id: string }[] } } = await req.json();
+      seen.push({ path: new URL(req.url).pathname, model: body.model, auth: req.headers.get("authorization") });
+      const answers: Record<string, unknown> = {};
+      for (const c of body.state?.chunks ?? []) answers[c.id] = { type: "noul", noul: 0.9 };
+      return new Response(JSON.stringify({ answers, usage: { input_tokens: 10 } }), { status: 200 });
+    },
+  });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "jgrep-mlx-"));
+  try {
+    fs.writeFileSync(path.join(dir, "a.ts"), "export function alpha() {\n  return 1;\n}\n");
+    const p = await spawn(
+      ["bun", "src/cli.ts", "--no-cache", "--provider", "mlx", "returns a number", dir],
+      { ...process.env, JGREP_NO_MAIN: "", MLX_DECISION_URL: `http://127.0.0.1:${server.port}` }, // the module sets JGREP_NO_MAIN for its own import; the child must really run
+    );
+    expect(p.exitCode).toBe(0);
+    expect(seen).toHaveLength(1); // one small file, one batch: exactly one request
+    expect(seen[0].path).toBe("/v1/systemone"); // the built-in's path, appended to the env base URL
+    expect(seen[0].model).toBe("elephant-1"); // the id the server answers for
+    expect(seen[0].auth).toBeNull(); // loopback is keyless: no empty Bearer is sent
+  } finally {
+    server.stop(true);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}, 20_000);
+
 test("cli main rows: --json emits the position-aligned flattened array; --json-errors wraps it; --out follows the flag", async () => {
   const fs = await import("node:fs");
   const os = await import("node:os");
