@@ -900,7 +900,7 @@ export interface PostOpts {
   fetchImpl?: Fetch;                     // DI seam (same as the old jgrep.ts option)
   requestTimeoutMs?: number;             // per attempt, fallback 30_000 (REQUEST_TIMEOUT_MS); CLI passes DEFAULT_REQUEST_TIMEOUT_SEC (400)
   deadlineMs?: number;                   // absolute epoch ms — batch deadline INCLUDING all retries (compared on the monotonic clock internally)
-  maxRetries?: number;                   // default 50 (=> 51 total attempts)
+  maxRetries?: number;                   // CLI passes DEFAULT_MAX_RETRIES (50, => 51 total attempts); unset in direct API use
   sleep?: (ms: number) => Promise<void>; // DI for tests
   limiter?: RateLimiter;                 // shared token bucket
   /** The run's --budget meter (TRDD-3KBUODCE): each chain attempt reserves and settles
