@@ -316,14 +316,21 @@ test("FIX 0: fractional timer values never crash — the deadline-derived per-at
 
 // ---- postSystemOne: default deadline (24h safety net) ----
 
-test("default deadline: a bare call (no deadlineMs) is deadline-capped by 24h, not unbounded — per-attempt timeout stays the full requestTimeoutMs", async () => {
+test("default deadline: a bare call (no deadlineMs) is deadline-capped by 24h, not unbounded — a requestTimeoutMs beyond 24h proves the cap", async () => {
   const ok = scriptedFetch(() => resp(200, GOOD));
   await withTimeoutRecorder(async (recorded) => {
-    const r = await postSystemOne({ model: "m", questions: {} }, BACKENDS.typesafe, "k", { fetchImpl: ok.fetchImpl });
+    // requestTimeoutMs LARGER than the 24h default: only a present deadline can cap
+    // it, so the recorded abort delay proves the default deadline exists (a revert
+    // to no-default-deadline would record the full 25h requestTimeoutMs instead).
+    const r = await postSystemOne({ model: "m", questions: {} }, BACKENDS.typesafe, "k", {
+      fetchImpl: ok.fetchImpl,
+      requestTimeoutMs: 25 * 60 * 60 * 1000,
+    });
     expect(r.answers.c0.noul).toBe(0.9);
-    // The 24h default is far above any requestTimeoutMs, so it must NOT cap the
-    // per-attempt timeout: the recorded delay is the full DEFAULT_REQUEST_TIMEOUT_SEC.
-    expect(recorded).toEqual([DEFAULT_REQUEST_TIMEOUT_SEC * 1000]);
+    const limit = 24 * 60 * 60 * 1000;
+    expect(recorded.length).toBe(1);
+    expect(recorded[0]).toBeLessThanOrEqual(limit);
+    expect(recorded[0]).toBeGreaterThan(limit - 60_000); // within a minute of 24h — capped by the deadline, not by anything else
   });
 });
 
