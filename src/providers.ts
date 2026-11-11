@@ -895,15 +895,20 @@ export class RateLimiter {
 // them from this module, and postSystemOne's PostOpts fallbacks are the SAME
 // constants — one value per concept, no CLI-vs-direct-API split.
 //
-// Worst case for a BARE postSystemOne call (omits deadlineMs, requestTimeoutMs,
-// maxRetries): 51 attempts × 400s + ~50×30s capped backoff ≈ 6h. The CLI and
-// jgrep() layers always pass a 200s batch deadline, so they are bounded; only
-// a direct caller who omits deadlineMs is unbounded. That is the tradeoff of
-// single-home: the direct-API floor inherits CLI-tuned magnitude.
+// A BARE postSystemOne call (omits deadlineMs, requestTimeoutMs, maxRetries)
+// falls back to DEFAULT_DEADLINE_MS (24h) — above the ~6h worst case
+// (51 attempts × 400s + ~50×30s capped backoff), so a healthy call never
+// trips it, but no call runs unbounded. The CLI and jgrep() layers pass their
+// own 200s batch deadline, which overrides the 24h safety net.
 export const DEFAULT_TIMEOUT_SEC = 200;        // per-batch deadline INCLUDING retries (§1.6.1)
 export const DEFAULT_REQUEST_TIMEOUT_SEC = 400; // per attempt
 export const DEFAULT_MAX_RETRIES = 50;         // => 51 total attempts
 const REQUEST_TIMEOUT_MS = DEFAULT_REQUEST_TIMEOUT_SEC * 1000; // per attempt, ms form used by postSystemOne's fallback
+/** Safety-net deadline for a BARE postSystemOne call that omits deadlineMs: 24h.
+ *  Above the ~6h worst case (51×400s + backoff), so a healthy call never trips it,
+ *  but no direct-API call runs unbounded. The CLI and jgrep() layers pass their
+ *  own 200s batch deadline, which overrides this. */
+const DEFAULT_DEADLINE_MS = 24 * 60 * 60 * 1000;
 /** Default deadline of a free key check (`jgrep init` and `jgrep status` use it too; USAGE states it). */
 export const VERIFY_TIMEOUT_MS = 15_000;
 const SNIPPET_MAX = 300;
@@ -1121,15 +1126,18 @@ export async function postSystemOne(
   // The epoch deadline is converted to a MONOTONIC deadline once, at entry: the wall
   // clock can jump (NTP, manual adjust) but performance.now() cannot — same clock the
   // token bucket runs on. Identical behavior on a normal clock.
-  const deadline = opts.deadlineMs === undefined ? undefined : monotonicMs() + (opts.deadlineMs - Date.now());
+  // deadlineMs is an ABSOLUTE epoch timestamp (the PostOpts contract); the default
+  // is "now + 24h" so a bare call gets a 24h safety-net deadline.
+  const deadlineMs = opts.deadlineMs ?? Date.now() + DEFAULT_DEADLINE_MS;
+  const deadline = monotonicMs() + (deadlineMs - Date.now());
 
   for (let attempt = 0; ; attempt++) {
     // Pacing before EVERY attempt, retries included (§1.7). The monotonic deadline rides
     // along: the limiter rejects a waiter whose deadline lapses while queued — without
     // consuming a token — and the pre-attempt check below stays as the backstop.
-    await opts.limiter?.acquire(deadline !== undefined ? { deadlineMono: deadline, provider: backend.name } : undefined);
+    await opts.limiter?.acquire({ deadlineMono: deadline, provider: backend.name });
 
-    if (deadline !== undefined && deadline - monotonicMs() <= 0) {
+    if (deadline - monotonicMs() <= 0) {
       throw new JevProviderError(
         "timeout",
         `${backend.name} deadline exceeded before attempt ${attempt + 1} (the batch deadline includes retries)`,
@@ -1137,9 +1145,7 @@ export async function postSystemOne(
       );
     }
 
-    const perAttemptMs = deadline === undefined
-      ? requestTimeoutMs
-      : Math.min(requestTimeoutMs, deadline - monotonicMs());
+    const perAttemptMs = Math.min(requestTimeoutMs, deadline - monotonicMs());
     // The deadline branch is fractional (monotonic math) and Node throws RangeError on a
     // fractional abort delay — floor to a positive integer (see abortDelayMs).
     const signal = AbortSignal.timeout(abortDelayMs(perAttemptMs));
@@ -1233,7 +1239,7 @@ export async function postSystemOne(
     const retryAfterMs = parseRetryAfter(retryAfterRaw); // transport errors have no header -> null
     // A Retry-After the batch deadline cannot outlast: sleeping until the deadline only to
     // report "timeout" hid the real cause (throttling) and its fix (--rate). Say so now.
-    if (deadline !== undefined && retryAfterMs !== null && retryAfterMs > deadline - monotonicMs()) {
+    if (retryAfterMs !== null && retryAfterMs > deadline - monotonicMs()) {
       throw new JevProviderError(
         retryKind,
         `${backend.name} ${retryStatus ?? retryKind}: the provider asked to wait ${Math.ceil(retryAfterMs / 1000)}s (Retry-After), longer than the batch deadline allows`,
@@ -1241,7 +1247,7 @@ export async function postSystemOne(
       );
     }
     let wait = Math.min(Math.max(delay, retryAfterMs ?? 0), RETRY_AFTER_MAX_MS);
-    if (deadline !== undefined) wait = Math.min(wait, deadline - monotonicMs());
+    wait = Math.min(wait, deadline - monotonicMs());
     // Integer ms only: jitter and the deadline remainder are floats (see abortDelayMs).
     await sleep(Math.max(0, Math.floor(wait)));
   }

@@ -282,7 +282,7 @@ test("abort-delay contract: deadline-budget path (limiter + deadlineMs) records 
   expect(calls.length).toBe(2);
 });
 
-test("abort-delay contract: plain no-deadline path and verifyApiKey record INTEGER ms timeouts", async () => {
+test("abort-delay contract: default-deadline path and verifyApiKey record INTEGER ms timeouts", async () => {
   const ok = scriptedFetch(() => resp(200, GOOD));
   const ping = scriptedFetch(() => resp(200, { model: "jev-latest", answers: {} }));
   await withTimeoutRecorder(async (recorded) => {
@@ -312,6 +312,19 @@ test("FIX 0: fractional timer values never crash — the deadline-derived per-at
   });
   expect(r2.answers.c0.noul).toBe(0.9);
   expect(calls.length).toBe(2);
+});
+
+// ---- postSystemOne: default deadline (24h safety net) ----
+
+test("default deadline: a bare call (no deadlineMs) is deadline-capped by 24h, not unbounded — per-attempt timeout stays the full requestTimeoutMs", async () => {
+  const ok = scriptedFetch(() => resp(200, GOOD));
+  await withTimeoutRecorder(async (recorded) => {
+    const r = await postSystemOne({ model: "m", questions: {} }, BACKENDS.typesafe, "k", { fetchImpl: ok.fetchImpl });
+    expect(r.answers.c0.noul).toBe(0.9);
+    // The 24h default is far above any requestTimeoutMs, so it must NOT cap the
+    // per-attempt timeout: the recorded delay is the full DEFAULT_REQUEST_TIMEOUT_SEC.
+    expect(recorded).toEqual([DEFAULT_REQUEST_TIMEOUT_SEC * 1000]);
+  });
 });
 
 // ---- postSystemOne: request shape, cost extraction ----
