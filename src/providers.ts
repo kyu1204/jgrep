@@ -892,6 +892,8 @@ export class RateLimiter {
 }
 
 const REQUEST_TIMEOUT_MS = 30_000;
+/** Fallback retry count for direct API use (PostOpts.maxRetries unset). The CLI always passes DEFAULT_MAX_RETRIES (50); this only applies to programmatic callers that omit it. Kept low (4) so direct API use does not retry aggressively by default. */
+const POST_MAX_RETRIES = 4;
 /** Default deadline of a free key check (`jgrep init` and `jgrep status` use it too; USAGE states it). */
 export const VERIFY_TIMEOUT_MS = 15_000;
 const SNIPPET_MAX = 300;
@@ -900,7 +902,7 @@ export interface PostOpts {
   fetchImpl?: Fetch;                     // DI seam (same as the old jgrep.ts option)
   requestTimeoutMs?: number;             // per attempt, fallback 30_000 (REQUEST_TIMEOUT_MS); CLI passes DEFAULT_REQUEST_TIMEOUT_SEC (400)
   deadlineMs?: number;                   // absolute epoch ms — batch deadline INCLUDING all retries (compared on the monotonic clock internally)
-  maxRetries?: number;                   // CLI passes DEFAULT_MAX_RETRIES (50, => 51 total attempts); fallback 4 (postSystemOne line 1100)
+  maxRetries?: number;                   // CLI passes DEFAULT_MAX_RETRIES (50, => 51 total attempts); fallback 4 (POST_MAX_RETRIES)
   sleep?: (ms: number) => Promise<void>; // DI for tests
   limiter?: RateLimiter;                 // shared token bucket
   /** The run's --budget meter (TRDD-3KBUODCE): each chain attempt reserves and settles
@@ -1097,7 +1099,7 @@ export async function postSystemOne(
   opts: PostOpts = {},
 ): Promise<PostResult> {
   const fetchImpl = opts.fetchImpl ?? fetch;
-  const maxRetries = opts.maxRetries ?? 4;
+  const maxRetries = opts.maxRetries ?? POST_MAX_RETRIES;
   const requestTimeoutMs = opts.requestTimeoutMs ?? REQUEST_TIMEOUT_MS;
   const sleep = opts.sleep ?? defaultSleep;
   const adapter = ADAPTERS[backend.adapter];
