@@ -898,9 +898,9 @@ const SNIPPET_MAX = 300;
 
 export interface PostOpts {
   fetchImpl?: Fetch;                     // DI seam (same as the old jgrep.ts option)
-  requestTimeoutMs?: number;             // per attempt, default 30_000
+  requestTimeoutMs?: number;             // per attempt, fallback 30_000 (REQUEST_TIMEOUT_MS); CLI passes DEFAULT_REQUEST_TIMEOUT_SEC (400)
   deadlineMs?: number;                   // absolute epoch ms — batch deadline INCLUDING all retries (compared on the monotonic clock internally)
-  maxRetries?: number;                   // default 4 (=> 5 total attempts)
+  maxRetries?: number;                   // default 50 (=> 51 total attempts)
   sleep?: (ms: number) => Promise<void>; // DI for tests
   limiter?: RateLimiter;                 // shared token bucket
   /** The run's --budget meter (TRDD-3KBUODCE): each chain attempt reserves and settles

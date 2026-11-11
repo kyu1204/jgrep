@@ -460,7 +460,7 @@ cache.
 - **Retries**: statuses 408/429/500/502/503/504/529 and transport errors
   (timeouts, `ECONNRESET`/`ETIMEDOUT`/`ECONNREFUSED`/`EAI_AGAIN`) retry with
   full-jitter exponential backoff (500 ms base, 30 s cap), `--retries` times
-  (default 4, so 5 attempts). A provider `Retry-After` is honored, capped at
+  (default 50, so 51 attempts). A provider `Retry-After` is honored, capped at
   5 minutes; one longer than what is left of the batch deadline fails the batch
   at once as `rate_limited` (pace with `--rate`) instead of sleeping into a
   `timeout`. Redirects are never followed (the request carries your key): a 3xx
@@ -632,10 +632,10 @@ environment
   NO_COLOR              plain output (also plain when stdout is not a terminal)
 
 reliability
-      --timeout <s>     per-batch deadline, retries included (default 15)
-      --request-timeout <s>  per-attempt HTTP timeout (default 30; init, status: 15)
-      --retries <n>     failed attempts tolerated per batch (default 4)
-  -c, --concurrency <n> parallel requests (default 16)
+      --timeout <s>     per-batch deadline, retries included (default 200)
+      --request-timeout <s>  per-attempt HTTP timeout (default 400; init, status: 15)
+      --retries <n>     failed attempts tolerated per batch (default 50)
+  -c, --concurrency <n> parallel requests (default 1)
       --rate <req/s>    global request pacing (token bucket); 0 = unlimited
       --fail-fast       abort on the first fatal error instead of isolating it
 

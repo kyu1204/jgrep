@@ -37,7 +37,7 @@ const VERSION = "0.7.0";
 export const DEFAULT_THRESHOLD = 0.7;
 export const TESTS_THRESHOLD = 0.5; // --tests: recall matters more there
 export const DEFAULT_BATCH = 16;
-export const DEFAULT_CONCURRENCY = 16;
+export const DEFAULT_CONCURRENCY = 1;
 export const MAX_VOTES = 5;
 export const MIN_TAG_CATEGORIES = 2;
 /** Exit status, grep semantics: something matched / nothing matched / error or partial failure. */

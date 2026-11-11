@@ -33,7 +33,7 @@ const { resolveChain } = await import("./providers");
 
 test("cli parse: new flags parse with correct types and defaults", () => {
   const o = parse(["q"]);
-  expect(o).toMatchObject({ provider: "", model: "", timeout: 15, requestTimeout: 30, retries: 4, rate: 0, failFast: false, estimateOnly: false });
+  expect(o).toMatchObject({ provider: "", model: "", timeout: 200, requestTimeout: 400, retries: 50, rate: 0, failFast: false, estimateOnly: false });
   expect(typeof o.timeout).toBe("number");
   expect(typeof o.retries).toBe("number");
   expect(typeof o.failFast).toBe("boolean");

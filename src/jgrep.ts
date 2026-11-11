@@ -622,9 +622,9 @@ export function buildTagRequest(hits: Hit[], tags: string[], kind: Kind = "code"
 // ---- core -------------------------------------------------------------------
 // Retry/deadline defaults live in ONE place (here); jgrep()/scoreRows() resolve
 // them once per run and the pool workers only read the resolved values.
-export const DEFAULT_TIMEOUT_SEC = 15;         // per-batch deadline INCLUDING retries (§1.6.1)
-export const DEFAULT_REQUEST_TIMEOUT_SEC = 30; // per attempt
-export const DEFAULT_MAX_RETRIES = 4;          // => 5 total attempts
+export const DEFAULT_TIMEOUT_SEC = 200;        // per-batch deadline INCLUDING retries (§1.6.1)
+export const DEFAULT_REQUEST_TIMEOUT_SEC = 400; // per attempt
+export const DEFAULT_MAX_RETRIES = 50;         // => 51 total attempts
 
 /** --estimate dry-run sink (upstream #14): each request that WOULD be sent adds 1 request
  *  and its JSON body length; nothing is sent and no key is resolved. */

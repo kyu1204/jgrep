@@ -168,10 +168,10 @@ environment
   NO_COLOR              plain output (also plain when stdout is not a terminal)
 
 reliability
-      --timeout <s>     per-batch deadline, retries included (default 15)
-      --request-timeout <s>  per-attempt HTTP timeout (default 30; init, status: 15)
-      --retries <n>     failed attempts tolerated per batch (default 4)
-  -c, --concurrency <n> parallel requests (default 16)
+      --timeout <s>     per-batch deadline, retries included (default 200)
+      --request-timeout <s>  per-attempt HTTP timeout (default 400; init, status: 15)
+      --retries <n>     failed attempts tolerated per batch (default 50)
+  -c, --concurrency <n> parallel requests (default 1)
       --rate <req/s>    global request pacing (token bucket); 0 = unlimited
       --fail-fast       abort on the first fatal error instead of isolating it
 
