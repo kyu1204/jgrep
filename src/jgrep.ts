@@ -6,8 +6,13 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chainFor, DEFAULT_PRICE_PER_MTOK, jgrepHome, RateLimiter, type Backend, type Fetch, type PostOpts, type ProviderChain } from "./providers";
+import { chainFor, DEFAULT_MAX_RETRIES, DEFAULT_PRICE_PER_MTOK, DEFAULT_REQUEST_TIMEOUT_SEC, DEFAULT_TIMEOUT_SEC, jgrepHome, RateLimiter, type Backend, type Fetch, type PostOpts, type ProviderChain } from "./providers";
 import { runPool, type PoolResult } from "./pool";
+// Retry/deadline defaults live in providers.ts (single home, one value per
+// concept: postSystemOne's fallbacks and the CLI defaults are the same
+// constants); re-exported here because rows.ts, cli.ts and tests import them
+// from this module.
+export { DEFAULT_TIMEOUT_SEC, DEFAULT_REQUEST_TIMEOUT_SEC, DEFAULT_MAX_RETRIES };
 import { isFatalError, JevProviderError, type JevErrorKind } from "./errors";
 import { detectLanguage, signatureChunks } from "./funcs";
 
@@ -620,11 +625,7 @@ export function buildTagRequest(hits: Hit[], tags: string[], kind: Kind = "code"
 }
 
 // ---- core -------------------------------------------------------------------
-// Retry/deadline defaults live in ONE place (here); jgrep()/scoreRows() resolve
-// them once per run and the pool workers only read the resolved values.
-export const DEFAULT_TIMEOUT_SEC = 200;        // per-batch deadline INCLUDING retries (§1.6.1)
-export const DEFAULT_REQUEST_TIMEOUT_SEC = 400; // per attempt
-export const DEFAULT_MAX_RETRIES = 50;         // => 51 total attempts
+// Retry/deadline defaults re-exported above from providers.ts (single home).
 
 /** --estimate dry-run sink (upstream #14): each request that WOULD be sent adds 1 request
  *  and its JSON body length; nothing is sent and no key is resolved. */

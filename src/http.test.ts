@@ -1,6 +1,6 @@
 // @ts-expect-error — no bun-types in this zero-dep repo; Bun provides bun:test at runtime
 import { test, expect } from "bun:test";
-import { BACKENDS, RateLimiter, postSystemOne, verifyApiKey, type Fetch } from "./providers";
+import { BACKENDS, DEFAULT_REQUEST_TIMEOUT_SEC, RateLimiter, postSystemOne, verifyApiKey, type Fetch } from "./providers";
 import { JevProviderError } from "./errors";
 
 /** Ambient monotonic clock — deadlineMono values must live on performance.now(), never Date.now(). */
@@ -282,14 +282,14 @@ test("abort-delay contract: deadline-budget path (limiter + deadlineMs) records 
   expect(calls.length).toBe(2);
 });
 
-test("abort-delay contract: plain no-deadline path and verifyApiKey record the literal 30s/15s INTEGER timeouts", async () => {
+test("abort-delay contract: plain no-deadline path and verifyApiKey record the literal DEFAULT_REQUEST_TIMEOUT_SEC/VERIFY INTEGER timeouts", async () => {
   const ok = scriptedFetch(() => resp(200, GOOD));
   const ping = scriptedFetch(() => resp(200, { model: "jev-latest", answers: {} }));
   await withTimeoutRecorder(async (recorded) => {
     await postSystemOne({}, BACKENDS.openrouter, "k", { fetchImpl: ok.fetchImpl });
     const v = await verifyApiKey(BACKENDS.typesafe, "k", { fetchImpl: ping.fetchImpl });
     expect(v.status).toBe("ok");
-    expect(recorded).toEqual([30_000, 15_000]); // requestTimeoutMs then VERIFY_TIMEOUT_MS
+    expect(recorded).toEqual([DEFAULT_REQUEST_TIMEOUT_SEC * 1000, 15_000]); // requestTimeoutMs then VERIFY_TIMEOUT_MS
   });
 });
 
