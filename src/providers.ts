@@ -894,10 +894,16 @@ export class RateLimiter {
 // Retry/deadline defaults live HERE (single home); jgrep() and the CLI resolve
 // them from this module, and postSystemOne's PostOpts fallbacks are the SAME
 // constants — one value per concept, no CLI-vs-direct-API split.
+//
+// Worst case for a BARE postSystemOne call (omits deadlineMs, requestTimeoutMs,
+// maxRetries): 51 attempts × 400s + ~50×30s capped backoff ≈ 6h. The CLI and
+// jgrep() layers always pass a 200s batch deadline, so they are bounded; only
+// a direct caller who omits deadlineMs is unbounded. That is the tradeoff of
+// single-home: the direct-API floor inherits CLI-tuned magnitude.
 export const DEFAULT_TIMEOUT_SEC = 200;        // per-batch deadline INCLUDING retries (§1.6.1)
 export const DEFAULT_REQUEST_TIMEOUT_SEC = 400; // per attempt
 export const DEFAULT_MAX_RETRIES = 50;         // => 51 total attempts
-export const REQUEST_TIMEOUT_MS = DEFAULT_REQUEST_TIMEOUT_SEC * 1000; // per attempt, ms form used by postSystemOne's fallback
+const REQUEST_TIMEOUT_MS = DEFAULT_REQUEST_TIMEOUT_SEC * 1000; // per attempt, ms form used by postSystemOne's fallback
 /** Default deadline of a free key check (`jgrep init` and `jgrep status` use it too; USAGE states it). */
 export const VERIFY_TIMEOUT_MS = 15_000;
 const SNIPPET_MAX = 300;

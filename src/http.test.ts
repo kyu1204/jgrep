@@ -282,7 +282,7 @@ test("abort-delay contract: deadline-budget path (limiter + deadlineMs) records 
   expect(calls.length).toBe(2);
 });
 
-test("abort-delay contract: plain no-deadline path and verifyApiKey record the literal DEFAULT_REQUEST_TIMEOUT_SEC/VERIFY INTEGER timeouts", async () => {
+test("abort-delay contract: plain no-deadline path and verifyApiKey record INTEGER timeouts (no fractional RangeError)", async () => {
   const ok = scriptedFetch(() => resp(200, GOOD));
   const ping = scriptedFetch(() => resp(200, { model: "jev-latest", answers: {} }));
   await withTimeoutRecorder(async (recorded) => {
