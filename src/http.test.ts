@@ -330,6 +330,9 @@ test("default deadline: a bare call (no deadlineMs) is deadline-capped by 24h, n
     const limit = 24 * 60 * 60 * 1000;
     expect(recorded.length).toBe(1);
     expect(recorded[0]).toBeLessThanOrEqual(limit);
+    // The two Date.now() calls drift by single-digit ms; the 60s margin only absorbs
+    // machine-suspension / scheduler-stall level pauses, yet stays far below the 25h a
+    // feature revert would record — which is exactly what this lower bound discriminates against.
     expect(recorded[0]).toBeGreaterThan(limit - 60_000); // within a minute of 24h — capped by the deadline, not by anything else
   });
 });
